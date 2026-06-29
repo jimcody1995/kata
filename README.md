@@ -1,104 +1,109 @@
 # PromptForge
 
-PromptForge is an objective prompt optimization repo for SN74/Gittensor.
+PromptForge is an objective prompt-optimization repo for SN74/Gittensor.
 
-It generates repo-specific prompts, evaluates them against pinned repo tasks, compares them with
-baseline prompts, and reports whether they improve verified task success.
+It evaluates repo-specific agent prompts on pinned benchmark tasks and only
+calls a prompt better when it solves more verified work under the same
+conditions.
 
-Current MVP scope:
+PromptForge is not a prompt library. The main product is the evaluation system:
 
-- generate one source-grounded repo-specific prompt
-- compare it with a fixed generic baseline
-- store a current frontier prompt per repo and mode
-- challenge that frontier with a candidate prompt on primary and holdout task pools
-- score prompts on pinned repo tasks with objective checks
+- fixed benchmark tasks
+- fixed baseline prompt
+- current frontier prompt
+- challenger prompt evaluation
+- objective promotion rules
 
-The current repo is an objective optimization harness first. It now supports a baseline/frontier/
-challenger workflow for prompt competition, but it is not yet a full multi-candidate prompt-search
-system.
+## What It Does
 
-PromptForge is not a prompt library. The core claim is:
+PromptForge currently supports:
 
-> a generated prompt is only better if it solves more validated repo tasks under the same eval
-> conditions.
+- repo-specific prompt generation from repo sources
+- fixed generic baseline prompts
+- eval-pack validation for pinned repo tasks
+- objective eval runs using real agent commands
+- baseline/frontier/challenger competition flow
+- primary and holdout task pools
+- manual frontier promotion after a successful challenge
 
-## Measurement Model
+Current MVP boundary:
 
-Prompt quality is measured with controlled repo evals:
+- it is a working manual competition system
+- it is not yet an automated challenger queue
+- it is not yet a full prompt-search engine
+
+## Core Idea
+
+A prompt only improves if it performs better on controlled repo tasks:
 
 - same repo snapshot
-- same task
+- same task definition
 - same agent command
 - same model and budget
-- baseline prompt vs PromptForge-generated prompt
+- same checks
+- prompt is the variable
 
-Each task defines objective checks in `checks.sh`. A prompt only improves if it increases verified
-task success, not because the wording looks better.
+Prompt quality is measured by task success, path-policy compliance, and any
+other behavior encoded directly in the benchmark checks. It is not judged by
+wording quality alone.
 
-## Registration MVP Interfaces
+## Competition Model
 
-```bash
-promptforge generate --repo <repo-path> --mode contributor
-promptforge baseline --repo <repo-path>
-promptforge eval --repo <repo-path> --eval-pack evals/<repo-name> --agent-command '<command>'
-promptforge frontier init --repo <repo-path> --eval-pack evals/<repo-name> --mode contributor
-promptforge challenge --eval-pack evals/<repo-name> --mode contributor --candidate-prompt <path> --agent-command '<command>'
-promptforge frontier promote --challenge-run <challenge-summary.json>
-promptforge report --run <run-id>
-```
+PromptForge uses three prompt roles for each repo and mode:
 
-## Current Benchmark Pack
+- `baseline`: fixed generic control prompt
+- `frontier`: current best verified prompt
+- `challenger`: new candidate prompt
 
-The first real eval pack is for:
+Competition flow:
+
+1. initialize a frontier manifest for a repo and mode
+2. evaluate `baseline`, `frontier`, and `challenger` on the same primary pool
+3. if the challenger beats the frontier, retest on the holdout pool
+4. only promote if the challenger also beats the frontier on holdout
+
+The baseline is not the prompt miners should use in production. It is the fixed
+control used to prove that repo-specific optimization is adding value.
+
+## Repository Layout
+
+- `promptforge/`: core package and CLI
+- `evals/`: benchmark packs for registered repos
+- `scripts/`: adapter commands for real agent evaluation
+- `tests/`: regression tests for evaluator behavior
+
+Tracked benchmark artifacts may also include:
+
+- `frontier.json`: repo competition manifest
+- `prompts/<mode>/baseline.md`
+- `prompts/<mode>/frontier.md`
+
+Generated eval runs are written to `runs/` and are ignored by git.
+
+## Current Benchmark
+
+Current live example benchmark pack:
 
 - `e35ventura/taopedia-articles`
 
-It currently includes three pinned contributor tasks:
+Current contributor tasks:
 
 - `add-delayed-proxies-article`
 - `clarify-subnet-77-identity-mapping`
 - `clarify-validator-take-vs-stake-weight`
 
-Each task:
-
-- pins the repo commit in `repo_ref.txt`
-- limits allowed edit paths
-- defines task-specific pass/fail checks
-- can be executed through the standard `promptforge eval` flow
-
-The repo now also includes a contributor frontier manifest for this pack:
+The tracked frontier manifest is:
 
 - `evals/e35ventura__taopedia-articles/frontier.json`
 
-It defines:
+That manifest currently defines:
 
-- a fixed baseline prompt
-- the current frontier prompt
+- a fixed contributor baseline prompt
+- a contributor frontier prompt
 - a primary task pool
-- a holdout task pool used for retest before promotion
+- a holdout task pool
 
-## Competition Workflow
-
-PromptForge now supports a miner-facing baseline/frontier/challenger loop:
-
-1. `baseline`
-   A fixed generic prompt used as the control.
-2. `frontier`
-   The current best verified prompt for a repo and mode.
-3. `challenger`
-   A new candidate prompt trying to replace the frontier.
-
-Competition flow:
-
-1. initialize the frontier manifest for a repo and mode
-2. evaluate `baseline`, `frontier`, and `challenger` on the same primary task pool
-3. if the challenger beats the frontier, retest on the holdout task pool
-4. only promote the challenger if it beats the frontier on both pools
-
-The baseline is not the production prompt miners use. It is the fixed control used to measure
-whether repo-specific optimization is adding value at all.
-
-## Local Workflow
+## Quickstart
 
 Generate a repo-specific prompt:
 
@@ -108,30 +113,40 @@ uv run python -m promptforge generate \
   --mode contributor
 ```
 
-Validate the task pack:
+Generate the fixed baseline prompt:
+
+```bash
+uv run python -m promptforge baseline \
+  --repo https://github.com/e35ventura/taopedia-articles.git \
+  --mode contributor
+```
+
+Validate the benchmark pack:
 
 ```bash
 uv run python -m promptforge eval-pack validate \
   --path evals/e35ventura__taopedia-articles
 ```
 
-Run an eval:
+Run a baseline-vs-generated eval:
 
 ```bash
 uv run python -m promptforge eval \
   --repo https://github.com/e35ventura/taopedia-articles.git \
   --eval-pack evals/e35ventura__taopedia-articles \
   --mode contributor \
-  --agent-command '<your-agent-command>'
+  --agent-command "$PWD/scripts/run_codex_eval.sh"
 ```
 
-Render a report:
+Render an eval report:
 
 ```bash
 uv run python -m promptforge report --run <run-id>
 ```
 
-Initialize a frontier manifest and prompt artifacts:
+## Frontier Workflow
+
+Initialize a frontier manifest:
 
 ```bash
 uv run python -m promptforge frontier init \
@@ -151,7 +166,7 @@ uv run python -m promptforge frontier show \
   --mode contributor
 ```
 
-Challenge the frontier with a candidate prompt:
+Challenge the frontier:
 
 ```bash
 uv run python -m promptforge challenge \
@@ -161,7 +176,7 @@ uv run python -m promptforge challenge \
   --agent-command "$PWD/scripts/run_codex_eval.sh"
 ```
 
-Promote a winning challenger into the frontier:
+Promote a winning challenger:
 
 ```bash
 uv run python -m promptforge frontier promote \
@@ -170,62 +185,49 @@ uv run python -m promptforge frontier promote \
 
 ## Real Agent Commands
 
-PromptForge evals are designed to call a real agent command. This repo now includes two adapter
-scripts:
+This repo includes two adapter scripts:
 
 - `scripts/run_codex_eval.sh`
 - `scripts/run_claude_eval.sh`
 
-Example with Codex:
-
-```bash
-uv run python -m promptforge eval \
-  --repo https://github.com/e35ventura/taopedia-articles.git \
-  --eval-pack evals/e35ventura__taopedia-articles \
-  --mode contributor \
-  --agent-command "$PWD/scripts/run_codex_eval.sh"
-```
-
-Example with Claude:
-
-```bash
-uv run python -m promptforge eval \
-  --repo https://github.com/e35ventura/taopedia-articles.git \
-  --eval-pack evals/e35ventura__taopedia-articles \
-  --mode contributor \
-  --agent-command "$PWD/scripts/run_claude_eval.sh"
-```
-
 Optional model overrides:
 
 ```bash
-PROMPTFORGE_CODEX_MODEL=o3 \
-uv run python -m promptforge eval ... --agent-command "$PWD/scripts/run_codex_eval.sh"
-
-PROMPTFORGE_CLAUDE_MODEL=sonnet \
-uv run python -m promptforge eval ... --agent-command "$PWD/scripts/run_claude_eval.sh"
+PROMPTFORGE_CODEX_MODEL=o3 uv run python -m promptforge eval ...
+PROMPTFORGE_CLAUDE_MODEL=sonnet uv run python -m promptforge eval ...
 ```
 
-These adapters assume the corresponding CLI is already authenticated and available on `PATH`.
+These adapters assume the corresponding CLI is already installed and
+authenticated.
 
-## Current Status
+## Open-Source Status
 
-The core CLI path is working:
+PromptForge is ready to be public as an MVP.
 
-- prompt generation
-- baseline generation
-- eval-pack scaffolding and validation
-- eval execution
-- frontier manifest creation
-- baseline/frontier/challenger challenge runs
-- manual frontier promotion from a successful challenge
-- markdown reporting
+What is already solid:
 
-What still remains before a strong registration submission:
+- the core objective-eval design
+- benchmark-pack validation
+- stricter report and path-policy handling
+- frontier challenge workflow
+- regression tests for evaluator behavior
 
-- run the benchmark pack with a real agent command
-- produce a real baseline-vs-generated result report
-- show that PromptForge improves measured task success, not only that the benchmark exists
-- add automated challenger submission, queueing, and promotion policy beyond manual CLI use
-- add a real prompt search loop instead of only user-supplied challenger prompts
-- expand test coverage for the evaluator and reporting logic
+What is still planned:
+
+- automated challenger submission and queueing
+- automated promotion policy
+- larger benchmark coverage
+- stronger reviewer-mode examples
+- prompt-search automation beyond manual challenger prompts
+- stronger maintainer-owned evaluator protection
+
+## Development
+
+Run the current checks:
+
+```bash
+uv run pytest
+uv run ruff check
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance.

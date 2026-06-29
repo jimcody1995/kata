@@ -1,1 +1,0 @@
-# One path per line. Leave comments if the task has no path restrictions.

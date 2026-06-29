@@ -1,1 +1,0 @@
-# One path per line. Add maintainer-owned or out-of-scope paths here.
