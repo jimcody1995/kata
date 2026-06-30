@@ -15,25 +15,25 @@ from kata.analyzers import (
     read_text,
 )
 from kata.config import resolve_registry_url
-from kata.models import PromptData, SourceFact
+from kata.models import RepoProfileData, SourceFact
 from kata.registry import load_registry
 from kata.repository import RepositoryContext, resolve_repository
 
 
-def generate_prompt(repo_ref: str, mode: str, registry_url: str | None = None) -> str:
+def generate_seed_instructions(repo_ref: str, mode: str, registry_url: str | None = None) -> str:
     with resolve_repository(repo_ref) as repo:
-        return generate_prompt_from_repository(repo, mode, registry_url)
+        return generate_seed_instructions_from_repository(repo, mode, registry_url)
 
 
-def generate_prompt_from_repository(
+def generate_seed_instructions_from_repository(
     repo: RepositoryContext,
     mode: str,
     registry_url: str | None = None,
 ) -> str:
     resolved_registry_url = resolve_registry_url(registry_url)
     registry = load_registry(resolved_registry_url)
-    prompt_data = analyze_repository(repo, registry, resolved_registry_url, mode)
-    return render_prompt(prompt_data, mode)
+    profile_data = analyze_repository(repo, registry, resolved_registry_url, mode)
+    return render_seed_instructions(profile_data, mode)
 
 
 def analyze_repository(
@@ -41,7 +41,7 @@ def analyze_repository(
     registry: dict[str, Any],
     registry_url: str,
     mode: str,
-) -> PromptData:
+) -> RepoProfileData:
     (
         readme_path,
         contributing_path,
@@ -57,39 +57,41 @@ def analyze_repository(
     codeowners_text = read_text(codeowners_path)
 
     title = extract_title(readme_text) or repo.display_name
-    prompt_data = PromptData(
+    profile_data = RepoProfileData(
         title=title,
         repo_display_name=repo.display_name,
         github_full_name=repo.full_name,
     )
     if readme_path is not None:
-        prompt_data.summary = extract_summary(readme_text, format_source_path(repo, readme_path))
+        profile_data.summary = extract_summary(readme_text, format_source_path(repo, readme_path))
     if contributing_path is not None:
-        prompt_data.rules.extend(
+        profile_data.rules.extend(
             extract_rules(contributing_text, format_source_path(repo, contributing_path))
         )
-        prompt_data.commands.extend(
+        profile_data.commands.extend(
             extract_commands(contributing_text, format_source_path(repo, contributing_path))
         )
     if agents_path is not None:
-        prompt_data.rules.extend(extract_rules(agents_text, format_source_path(repo, agents_path)))
+        profile_data.rules.extend(
+            extract_rules(agents_text, format_source_path(repo, agents_path))
+        )
     for workflow_path in workflow_paths:
-        prompt_data.commands.extend(
+        profile_data.commands.extend(
             extract_commands(read_text(workflow_path), format_source_path(repo, workflow_path))
         )
     if codeowners_path is not None:
-        prompt_data.protected_paths.extend(
+        profile_data.protected_paths.extend(
             extract_protected_paths(codeowners_text, format_source_path(repo, codeowners_path))
         )
-    prompt_data.rules = rank_rules(prompt_data.rules, mode)
-    prompt_data.commands = rank_commands(prompt_data.commands, mode)
-    prompt_data.protected_paths = dedupe_facts(prompt_data.protected_paths, limit=12)
+    profile_data.rules = rank_rules(profile_data.rules, mode)
+    profile_data.commands = rank_commands(profile_data.commands, mode)
+    profile_data.protected_paths = dedupe_facts(profile_data.protected_paths, limit=12)
 
     registry_entry = registry.get(repo.full_name) if repo.full_name else None
-    prompt_data.registry_notes.extend(
+    profile_data.registry_notes.extend(
         build_registry_notes(repo, registry_entry, local_weights_path is not None, registry_url)
     )
-    prompt_data.unknowns.extend(
+    profile_data.unknowns.extend(
         collect_unknowns(
             has_contributing=contributing_path is not None,
             has_codeowners=codeowners_path is not None,
@@ -97,7 +99,7 @@ def analyze_repository(
             has_registry=registry_entry is not None,
         )
     )
-    prompt_data.sources = collect_sources(
+    profile_data.sources = collect_sources(
         repo=repo,
         readme_path=readme_path,
         contributing_path=contributing_path,
@@ -107,7 +109,7 @@ def analyze_repository(
         workflow_paths=workflow_paths,
         registry_url=registry_url,
     )
-    return prompt_data
+    return profile_data
 
 
 def unpack_discovered_sources(
@@ -134,57 +136,59 @@ def as_optional_path(value: Path | list[Path] | None) -> Path | None:
     return value if isinstance(value, Path) else None
 
 
-def render_prompt(prompt_data: PromptData, mode: str) -> str:
+def render_seed_instructions(profile_data: RepoProfileData, mode: str) -> str:
     lines: list[str] = []
-    lines.append(f"# Kata {mode.capitalize()} Prompt: {prompt_data.title}")
+    lines.append(f"# Kata {mode.capitalize()} Seed Instructions: {profile_data.title}")
     lines.append("")
-    lines.append(f"Repo: `{prompt_data.repo_display_name}`")
-    if prompt_data.github_full_name:
-        lines.append(f"GitHub: `{prompt_data.github_full_name}`")
+    lines.append(f"Repo: `{profile_data.repo_display_name}`")
+    if profile_data.github_full_name:
+        lines.append(f"GitHub: `{profile_data.github_full_name}`")
     lines.append("")
-    lines.append("This prompt is source-grounded from repo files and the configured SN74 registry.")
+    lines.append(
+        "This seed instruction set is source-grounded from repo files and the configured SN74 registry."
+    )
     lines.append("")
     lines.append("## Repo Overview")
-    if prompt_data.summary is not None:
-        lines.append(f"- {prompt_data.summary.value} ({prompt_data.summary.source})")
+    if profile_data.summary is not None:
+        lines.append(f"- {profile_data.summary.value} ({profile_data.summary.source})")
     else:
         lines.append("- No reliable README summary was extracted.")
     lines.append("")
     lines.append(rule_section_title(mode))
-    if prompt_data.rules:
-        lines.extend(f"- {fact.value} ({fact.source})" for fact in prompt_data.rules)
+    if profile_data.rules:
+        lines.extend(f"- {fact.value} ({fact.source})" for fact in profile_data.rules)
     else:
         lines.append(
             "- No explicit contribution rules were extracted from CONTRIBUTING.md or AGENTS.md."
         )
     lines.append("")
     lines.append(command_section_title(mode))
-    if prompt_data.commands:
-        lines.extend(f"- `{fact.value}` ({fact.source})" for fact in prompt_data.commands)
+    if profile_data.commands:
+        lines.extend(f"- `{fact.value}` ({fact.source})" for fact in profile_data.commands)
     else:
         lines.append(
             "- No explicit validation commands were extracted from CONTRIBUTING.md or workflows."
         )
     lines.append("")
     lines.append(path_section_title(mode))
-    if prompt_data.protected_paths:
-        lines.extend(f"- {fact.value} ({fact.source})" for fact in prompt_data.protected_paths)
+    if profile_data.protected_paths:
+        lines.extend(f"- {fact.value} ({fact.source})" for fact in profile_data.protected_paths)
     else:
         lines.append("- No CODEOWNERS protected paths were extracted.")
-    checklist = build_mode_checklist(prompt_data, mode)
+    checklist = build_mode_checklist(profile_data, mode)
     if checklist:
         lines.append("")
         lines.append(checklist_section_title(mode))
         lines.extend(f"- {fact.value} ({fact.source})" for fact in checklist)
     lines.append("")
     lines.append("## Scoring / Registry Notes")
-    lines.extend(f"- {fact.value} ({fact.source})" for fact in prompt_data.registry_notes)
+    lines.extend(f"- {fact.value} ({fact.source})" for fact in profile_data.registry_notes)
     lines.append("")
     lines.append("## Unknowns / Caveats")
-    lines.extend(f"- {item}" for item in prompt_data.unknowns)
+    lines.extend(f"- {item}" for item in profile_data.unknowns)
     lines.append("")
     lines.append("## Sources")
-    lines.extend(f"- {source}" for source in prompt_data.sources)
+    lines.extend(f"- {source}" for source in profile_data.sources)
     return "\n".join(lines)
 
 
@@ -383,37 +387,37 @@ def checklist_section_title(mode: str) -> str:
     return "## Kata PR Checklist"
 
 
-def build_mode_checklist(prompt_data: PromptData, mode: str) -> list[SourceFact]:
+def build_mode_checklist(profile_data: RepoProfileData, mode: str) -> list[SourceFact]:
     if mode == "reviewer":
-        return build_reviewer_checklist(prompt_data)
-    return build_contributor_checklist(prompt_data)
+        return build_reviewer_checklist(profile_data)
+    return build_contributor_checklist(profile_data)
 
 
-def build_reviewer_checklist(prompt_data: PromptData) -> list[SourceFact]:
+def build_reviewer_checklist(profile_data: RepoProfileData) -> list[SourceFact]:
     checklist: list[SourceFact] = []
-    if prompt_data.commands:
+    if profile_data.commands:
         checklist.append(
             SourceFact(
                 "Confirm the PR includes or references the relevant validation commands above.",
-                prompt_data.commands[0].source,
+                profile_data.commands[0].source,
             )
         )
-    if prompt_data.protected_paths:
+    if profile_data.protected_paths:
         checklist.append(
             SourceFact(
                 "Confirm the diff does not touch protected or maintainer-owned paths "
                 "unintentionally.",
-                prompt_data.protected_paths[0].source,
+                profile_data.protected_paths[0].source,
             )
         )
-    for fact in prompt_data.rules:
+    for fact in profile_data.rules:
         lowered = fact.value.lower()
         if "visual evidence" in lowered or "screenshots" in lowered:
             checklist.append(
                 SourceFact("Confirm the PR includes the required visual evidence.", fact.source)
             )
             break
-    for fact in prompt_data.rules:
+    for fact in profile_data.rules:
         lowered = fact.value.lower()
         if "target" in lowered and (
             "test" in lowered or "main" in lowered or "origin/main" in lowered
@@ -425,30 +429,30 @@ def build_reviewer_checklist(prompt_data: PromptData) -> list[SourceFact]:
     return dedupe_facts(checklist, limit=4)
 
 
-def build_contributor_checklist(prompt_data: PromptData) -> list[SourceFact]:
+def build_contributor_checklist(profile_data: RepoProfileData) -> list[SourceFact]:
     checklist: list[SourceFact] = []
-    if prompt_data.commands:
+    if profile_data.commands:
         checklist.append(
             SourceFact(
                 "Run the most relevant validation commands above before opening the PR.",
-                prompt_data.commands[0].source,
+                profile_data.commands[0].source,
             )
         )
-    for fact in prompt_data.rules:
+    for fact in profile_data.rules:
         lowered = fact.value.lower()
         if "target" in lowered and (
             "test" in lowered or "main" in lowered or "origin/main" in lowered
         ):
             checklist.append(SourceFact("Target the expected branch for your PR.", fact.source))
             break
-    if prompt_data.protected_paths:
+    if profile_data.protected_paths:
         checklist.append(
             SourceFact(
                 "Avoid changing protected or maintainer-owned paths unless explicitly intended.",
-                prompt_data.protected_paths[0].source,
+                profile_data.protected_paths[0].source,
             )
         )
-    for fact in prompt_data.rules:
+    for fact in profile_data.rules:
         lowered = fact.value.lower()
         if "visual evidence" in lowered or "screenshots" in lowered:
             checklist.append(

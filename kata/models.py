@@ -10,7 +10,7 @@ class SourceFact:
 
 
 @dataclass
-class PromptData:
+class RepoProfileData:
     title: str
     repo_display_name: str
     github_full_name: str | None

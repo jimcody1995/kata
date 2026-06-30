@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 
 
-def render_seed_agent(*, prompt_text: str, mode: str, label: str) -> str:
-    prompt_literal = json.dumps(prompt_text.rstrip() + "\n")
+def render_seed_agent(*, instruction_text: str, mode: str, label: str) -> str:
+    instruction_literal = json.dumps(instruction_text.rstrip() + "\n")
     lane_literal = json.dumps(mode)
     label_literal = json.dumps(label)
     return f"""from __future__ import annotations
@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-PROMPT = {prompt_literal}
+SEED_INSTRUCTIONS = {instruction_literal}
 LANE_MODE = {lane_literal}
 AGENT_LABEL = {label_literal}
 MAX_FILE_BYTES = 4000
@@ -127,7 +127,7 @@ def request_diff(
         "Return only a unified diff that can be applied with git apply. "
         "Do not return prose, markdown fences, or explanations.\\n\\n"
         "Repo-specific instructions:\\n"
-        f"{{PROMPT}}"
+        f"{{SEED_INSTRUCTIONS}}"
     )
     user_prompt = (
         f"Lane mode: {{LANE_MODE}}\\n\\n"

@@ -12,10 +12,10 @@ from kata.agent_bundle import (
     replace_bundle_contents,
     write_agent_manifest,
 )
-from kata.baseline import generate_baseline_prompt
+from kata.baseline import generate_baseline_seed_instructions
 from kata.benchmarks import resolve_eval_pack_path
 from kata.eval_pack import discover_eval_pack_tasks
-from kata.generator import generate_prompt
+from kata.generator import generate_seed_instructions
 from kata.provenance import (
     EVALUATOR_VERSION,
     pool_fingerprint,
@@ -119,16 +119,16 @@ def init_frontier(
     frontier_root = artifact_dir / "frontier"
     baseline_root.mkdir(parents=True, exist_ok=True)
     frontier_root.mkdir(parents=True, exist_ok=True)
-    baseline_prompt = generate_baseline_prompt(repo_ref, mode)
-    frontier_prompt = generate_prompt(repo_ref, mode, registry_url)
+    baseline_instructions = generate_baseline_seed_instructions(repo_ref, mode)
+    frontier_instructions = generate_seed_instructions(repo_ref, mode, registry_url)
     write_agent_manifest(baseline_root / AGENT_MANIFEST_FILENAME)
     write_agent_manifest(frontier_root / AGENT_MANIFEST_FILENAME)
     (baseline_root / AGENT_ENTRY_FILENAME).write_text(
-        render_seed_agent(prompt_text=baseline_prompt, mode=mode, label="baseline"),
+        render_seed_agent(instruction_text=baseline_instructions, mode=mode, label="baseline"),
         encoding="utf-8",
     )
     (frontier_root / AGENT_ENTRY_FILENAME).write_text(
-        render_seed_agent(prompt_text=frontier_prompt, mode=mode, label="frontier"),
+        render_seed_agent(instruction_text=frontier_instructions, mode=mode, label="frontier"),
         encoding="utf-8",
     )
     primary_pool = [task_roots_by_name[task_id] for task_id in selected_primary]

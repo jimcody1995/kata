@@ -3,13 +3,16 @@ from __future__ import annotations
 from kata.repository import RepositoryContext, resolve_repository
 
 
-def generate_baseline_prompt(repo_ref: str, mode: str) -> str:
+def generate_baseline_seed_instructions(repo_ref: str, mode: str) -> str:
     with resolve_repository(repo_ref) as repo:
-        return generate_baseline_prompt_from_repository(repo, mode)
+        return generate_baseline_seed_instructions_from_repository(repo, mode)
 
 
-def generate_baseline_prompt_from_repository(repo: RepositoryContext, mode: str) -> str:
-    title = f"{mode.capitalize()} Baseline Prompt: {repo.display_name}"
+def generate_baseline_seed_instructions_from_repository(
+    repo: RepositoryContext,
+    mode: str,
+) -> str:
+    title = f"{mode.capitalize()} Baseline Seed Instructions: {repo.display_name}"
     lines: list[str] = []
     lines.append(f"# {title}")
     lines.append("")
@@ -17,7 +20,7 @@ def generate_baseline_prompt_from_repository(repo: RepositoryContext, mode: str)
     if repo.full_name:
         lines.append(f"GitHub: `{repo.full_name}`")
     lines.append("")
-    lines.append("This is the generic baseline prompt used for Kata comparison.")
+    lines.append("This is the generic baseline instruction set used for Kata comparison.")
     lines.append("It is intentionally not repo-specialized.")
     lines.append("")
     if mode == "reviewer":
