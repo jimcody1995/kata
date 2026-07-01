@@ -58,15 +58,15 @@ frontier state.
 
 The current live rule is:
 
-- `10` random public tasks from the live public pool
+- `20` random public tasks from the live public pool
 - `10` private holdout tasks from the live private pool
-- candidate must beat the king by at least `30` normalized score points on the
+- candidate must beat the king by at least `10` normalized score points on the
   public side
 - candidate must beat the king by at least `10` normalized score points on the
   holdout side
 
-With 10 equal-weight binary tasks per pool, this corresponds to roughly `+3`
-public tasks and `+1` hidden task.
+With 20 equal-weight binary public tasks and 10 equal-weight binary holdout
+tasks, this corresponds to roughly `+2` public tasks and `+1` hidden task.
 
 ## Runner Requirements
 

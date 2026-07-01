@@ -125,11 +125,11 @@ def test_evaluate_promotion_requires_configured_holdout_margin() -> None:
         task_ids=["task-a"],
         eval_run_summary="run_summary.json",
         total_task_weight=1.0,
-        variant_successes={"frontier": 5, "candidate": 8},
+        variant_successes={"frontier": 5, "candidate": 6},
         variant_invalid_tasks={"frontier": 0, "candidate": 0},
-        variant_scores={"frontier": 50.0, "candidate": 80.0},
+        variant_scores={"frontier": 50.0, "candidate": 60.0},
         candidate_beats_frontier=True,
-        candidate_score_delta=30.0,
+        candidate_score_delta=10.0,
     )
     holdout = ChallengePoolSummary(
         task_ids=["task-b"],
@@ -145,7 +145,7 @@ def test_evaluate_promotion_requires_configured_holdout_margin() -> None:
     promotion_ready, reason = evaluate_promotion(
         primary,
         holdout,
-        promotion_margin_points=30.0,
+        promotion_margin_points=10.0,
         holdout_promotion_margin_points=10.0,
     )
 

@@ -37,9 +37,9 @@ from kata.seed_agent import render_seed_agent
 FRONTIER_SCHEMA_VERSION = 4
 FRONTIER_FILENAME = "frontier.json"
 PRIVATE_FRONTIER_FILENAME = "frontier.private.json"
-DEFAULT_PROMOTION_MARGIN_POINTS = 30.0
+DEFAULT_PROMOTION_MARGIN_POINTS = 10.0
 DEFAULT_HOLDOUT_PROMOTION_MARGIN_POINTS = 10.0
-DEFAULT_RANDOM_PRIMARY_TASK_COUNT = 10
+DEFAULT_RANDOM_PRIMARY_TASK_COUNT = 20
 PRIMARY_SELECTION_FIXED = "fixed"
 PRIMARY_SELECTION_RANDOM_LIVE = "random_live"
 
@@ -206,7 +206,8 @@ def init_frontier(
     else:
         if len(available_tasks) < DEFAULT_RANDOM_PRIMARY_TASK_COUNT:
             raise ValueError(
-                "Frontier init requires at least 10 live public benchmark tasks "
+                "Frontier init requires at least "
+                f"{DEFAULT_RANDOM_PRIMARY_TASK_COUNT} live public benchmark tasks "
                 "for the random primary pool."
             )
         selected_primary = available_tasks[:DEFAULT_RANDOM_PRIMARY_TASK_COUNT]

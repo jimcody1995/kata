@@ -26,21 +26,22 @@ historical commit that originally fixed or added the article.
 
 The current production lane uses:
 
-- `10` public primary tasks sampled from `kata-benchmarks`
+- `20` public primary tasks sampled from `kata-benchmarks`
 - `10` private holdout tasks from `kata-benchmarks-private`
 - the same validator-owned model, command, budget, repo snapshot, and task set
   for both king and candidate
 
-Each pool is scored on a normalized `0-100` scale. With 10 equal-weight binary
-tasks, one solved task is worth 10 points.
+Each pool is scored on a normalized `0-100` scale. With 20 equal-weight binary
+primary tasks, one primary task is worth 5 points. With 10 equal-weight binary
+holdout tasks, one hidden task is worth 10 points.
 
 Promotion requires:
 
-- primary score at least `king + 30`
+- primary score at least `king + 10`
 - holdout score at least `king + 10`
 - no path-policy or benchmark-integrity failure
 
-In task-count terms, that is roughly `+3` public tasks and `+1` hidden task.
+In task-count terms, that is roughly `+2` public tasks and `+1` hidden task.
 
 ## Honest Current Weakness
 

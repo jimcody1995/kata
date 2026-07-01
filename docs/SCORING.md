@@ -234,11 +234,11 @@ Where:
 
 Recommended public-MVP default:
 
-- `m_primary = 30.0` points on the `0-100` scale
+- `m_primary = 10.0` points on the `0-100` scale
 - `m_holdout = 10.0` points on the `0-100` scale
 
-With 10 equal-weight binary tasks per pool, this means roughly `+3` public
-tasks and `+1` hidden task.
+With 20 equal-weight binary primary tasks and 10 equal-weight binary holdout
+tasks, this means roughly `+2` public tasks and `+1` hidden task.
 
 This protects the frontier from noise and trivial score differences.
 
@@ -420,7 +420,7 @@ For the public MVP, the recommended defaults are:
 - pool score normalized to `[0, 100]`
 - separate primary and holdout scores
 - cost reported separately
-- promotion margin of `30.0` primary-score points
+- promotion margin of `10.0` primary-score points
 - holdout margin of `10.0` holdout-score points
 
 This gives Kata a scoring model that is:

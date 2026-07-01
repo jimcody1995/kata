@@ -23,9 +23,9 @@ The live system is split across repos:
 
 ## Current Live Design
 
-For the current production design, one duel uses `20` tasks total:
+For the current production design, one duel uses `30` tasks total:
 
-- `10` public tasks
+- `20` public tasks
   - selected randomly from the current live public task set
 - `10` private tasks
   - taken from the current live private holdout pool
@@ -34,17 +34,18 @@ Each pool is scored independently on a normalized `0-100` scale:
 
 - each task produces quality in `[0, 1]`
 - equal-weight binary tasks behave like solved/not solved
-- with 10 equal-weight binary tasks, one task is worth 10 pool-score points
+- with 20 equal-weight binary public tasks, one public task is worth 5 pool-score points
+- with 10 equal-weight binary holdout tasks, one hidden task is worth 10 pool-score points
 
 Current promotion rule:
 
 - primary/public pool:
-  - candidate must score at least `king + 30`
+  - candidate must score at least `king + 10`
 - private/holdout pool:
   - candidate must score at least `king + 10`
 
-So, under the current 10-task binary pool design, the candidate needs roughly
-`+3` public tasks and `+1` hidden task versus the current king.
+So, under the current binary pool design, the candidate needs roughly `+2`
+public tasks and `+1` hidden task versus the current king.
 
 ## End-To-End PR Flow
 

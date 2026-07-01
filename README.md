@@ -97,14 +97,16 @@ Competition flow:
 
 Current live Taopedia rule:
 
-- total tasks per duel: `20`
-- public pool: `10` tasks selected randomly from the live public task set
+- total tasks per duel: `30`
+- public pool: `20` tasks selected randomly from the live public task set
 - holdout pool: `10` live private tasks
-- candidate must score at least `frontier + 30` on the public pool
+- candidate must score at least `frontier + 10` on the public pool
 - candidate must score at least `frontier + 10` on the holdout pool
 
-With 10 equal-weight binary tasks per pool, this means the candidate needs
-roughly `+3` public tasks and `+1` hidden task versus the current frontier.
+With 20 equal-weight binary public tasks, one public task is worth 5 points.
+With 10 equal-weight binary holdout tasks, one hidden task is worth 10 points.
+This means the candidate needs roughly `+2` public tasks and `+1` hidden task
+versus the current frontier.
 
 ## Benchmark Provenance
 
@@ -419,7 +421,7 @@ uv run kata frontier init \
 ```
 
 `--primary-task` and `--holdout-task` are optional explicit overrides. The
-current live Taopedia design instead uses `10` random public live tasks plus
+current live Taopedia design instead uses `20` random public live tasks plus
 `10` private holdout tasks from the configured manifests.
 
 Inspect the current frontier:

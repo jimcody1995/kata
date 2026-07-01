@@ -257,7 +257,7 @@ def test_init_frontier_stores_lane_artifacts_in_kata_repo_not_benchmark_pack(
         + "\n",
         encoding="utf-8",
     )
-    for index in range(10):
+    for index in range(20):
         write_valid_eval_task(pack_root / f"task-{index:02d}")
     monkeypatch.setenv("KATA_BENCHMARKS_ROOT", str(registry_root))
     monkeypatch.setenv("KATA_ROOT", str(kata_root))

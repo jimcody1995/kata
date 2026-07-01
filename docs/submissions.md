@@ -148,19 +148,19 @@ uv run kata submission evaluate \
 
 For the current live design:
 
-- `10` public tasks are selected randomly from the live public pool
+- `20` public tasks are selected randomly from the live public pool
 - `10` private tasks come from the current live holdout pool
 - each solved task is worth `1` point
 
 Promotion gate:
 
 - public pool:
-  - candidate must score at least `king + 30` normalized score points
+  - candidate must score at least `king + 10` normalized score points
 - private pool:
   - candidate must score at least `king + 10` normalized score points
 
-With 10 equal-weight binary tasks per pool, this corresponds to roughly `+3`
-public tasks and `+1` hidden task.
+With 20 equal-weight binary public tasks and 10 equal-weight binary holdout
+tasks, this corresponds to roughly `+2` public tasks and `+1` hidden task.
 
 ## Stale Frontier Protection
 
