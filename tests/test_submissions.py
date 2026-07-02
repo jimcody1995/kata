@@ -24,6 +24,7 @@ from kata.submissions import (
     PR_ACTION_MERGE,
     PR_ACTION_RERUN_STALE,
     decide_submission_action,
+    evaluate_submission,
     hash_submission_bundle,
     init_submission,
     inspect_pull_request,
@@ -510,6 +511,176 @@ def test_validate_submission_rejects_non_bitsec_report_contract_for_miner(
 
     assert not result.is_valid
     assert any("Bitsec-compatible report" in reason for reason in result.reasons)
+
+
+def test_evaluate_submission_routes_sn60_miner_to_sn60_challenge(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry_root = tmp_path / "registry"
+    write_registry(registry_root, active_repo_packs=["sn60__bitsec"])
+    pack_root = write_frontier_pack(
+        registry_root,
+        "sn60__bitsec",
+        "/tmp/repo",
+        modes=("miner",),
+    )
+    monkeypatch.setenv("KATA_BENCHMARKS_ROOT", str(registry_root))
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="miner-sn60-route",
+        output_root=str(repo_root / "submissions"),
+    )
+    (submission_root / "agent.py").write_text(VALID_MINER_AGENT, encoding="utf-8")
+    sentinel = object()
+    calls: dict[str, object] = {}
+
+    def fake_run_sn60_challenge(**kwargs):
+        calls.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr("kata.submissions.run_sn60_challenge", fake_run_sn60_challenge)
+
+    summary = evaluate_submission(
+        str(submission_root),
+        agent_command="/bin/true",
+        output_root=str(tmp_path / "runs"),
+        sn60_project_keys=["project-a"],
+        sn60_replicas_per_project=2,
+        sn60_sandbox_root=str(tmp_path / "sandbox"),
+        sn60_benchmark_file="benchmark.json",
+        sn60_sandbox_commit="sandbox-commit",
+    )
+
+    assert summary is sentinel
+    assert calls["frontier_artifact_path"] == str(
+        (pack_root / "agents" / "miner" / "frontier").resolve()
+    )
+    assert calls["candidate_artifact_path"] == str(submission_root.resolve())
+    assert calls["project_keys"] == ["project-a"]
+    assert calls["candidate_submission_id"] == "miner-sn60-route"
+    assert calls["lane_id"] == "sn60__bitsec"
+    assert calls["replicas_per_project"] == 2
+    assert calls["sandbox_root"] == str(tmp_path / "sandbox")
+    assert calls["benchmark_file"] == "benchmark.json"
+    assert calls["sandbox_commit"] == "sandbox-commit"
+
+
+def test_evaluate_submission_keeps_contributor_on_legacy_frontier_challenge(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry_root = tmp_path / "registry"
+    write_registry(registry_root)
+    write_frontier_pack(registry_root, "example__repo", "/tmp/repo")
+    monkeypatch.setenv("KATA_BENCHMARKS_ROOT", str(registry_root))
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="example__repo",
+        mode="contributor",
+        submission_id="miner-legacy-route",
+        output_root=str(repo_root / "submissions"),
+    )
+    (submission_root / "agent.py").write_text(VALID_AGENT, encoding="utf-8")
+    sentinel = object()
+    calls: dict[str, object] = {}
+
+    def fake_run_frontier_challenge(**kwargs):
+        calls.update(kwargs)
+        return sentinel
+
+    def fake_run_sn60_challenge(**_kwargs):
+        raise AssertionError("legacy contributor lane must not use SN60 challenge")
+
+    monkeypatch.setattr("kata.submissions.run_frontier_challenge", fake_run_frontier_challenge)
+    monkeypatch.setattr("kata.submissions.run_sn60_challenge", fake_run_sn60_challenge)
+
+    summary = evaluate_submission(
+        str(submission_root),
+        agent_command="/bin/true",
+        output_root=str(tmp_path / "runs"),
+        sn60_project_keys=["project-a"],
+    )
+
+    assert summary is sentinel
+    assert calls["eval_pack_path"] == "example__repo"
+    assert calls["mode"] == "contributor"
+    assert calls["candidate_artifact_path"] == str(submission_root.resolve())
+    assert calls["agent_command"] == "/bin/true"
+
+
+def test_verify_submission_result_accepts_sn60_summary(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    registry_root = tmp_path / "registry"
+    write_registry(registry_root, active_repo_packs=["sn60__bitsec"])
+    pack_root = write_frontier_pack(
+        registry_root,
+        "sn60__bitsec",
+        "/tmp/repo",
+        modes=("miner",),
+    )
+    monkeypatch.setenv("KATA_BENCHMARKS_ROOT", str(registry_root))
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="miner-sn60-verify",
+        output_root=str(repo_root / "submissions"),
+    )
+    (submission_root / "agent.py").write_text(VALID_MINER_AGENT, encoding="utf-8")
+    frontier_root = pack_root / "agents" / "miner" / "frontier"
+    summary_path = tmp_path / "challenge_summary.json"
+    duel_summary_path = tmp_path / "duel_summary.json"
+    duel_summary_path.write_text("{}\n", encoding="utf-8")
+    summary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 4,
+                "run_id": "sn60-run",
+                "manifest_path": str(duel_summary_path),
+                "mode": "miner",
+                "evaluator_version": "ScaBenchScorerV2@test",
+                "validator_model": "sn60-bitsec-sandbox",
+                "frontier_artifact": str(frontier_root.resolve()),
+                "candidate_artifact": str(submission_root.resolve()),
+                "frontier_artifact_hash": sha256_directory(
+                    frontier_root,
+                    include=[AGENT_ENTRY_FILENAME, AGENT_MANIFEST_FILENAME],
+                ),
+                "candidate_artifact_hash": hash_submission_bundle(submission_root),
+                "primary_pool_fingerprint": "sn60-fingerprint",
+                "holdout_pool_fingerprint": None,
+                "promotion_margin_points": 0.0,
+                "holdout_promotion_margin_points": 0.0,
+                "created_at": "2026-07-01T00:00:00+00:00",
+                "primary": {
+                    "task_ids": ["project-a"],
+                    "eval_run_summary": str(duel_summary_path),
+                    "total_task_weight": 2.0,
+                    "variant_successes": {"frontier": 1, "candidate": 2},
+                    "variant_invalid_tasks": {"frontier": 0, "candidate": 0},
+                    "variant_scores": {"frontier": 50.0, "candidate": 80.0},
+                    "candidate_beats_frontier": True,
+                    "candidate_score_delta": 30.0,
+                },
+                "holdout": None,
+                "promotion_ready": True,
+                "promotion_reason": "sn60__bitsec: candidate beat the current SN60 king",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = verify_submission_result(str(submission_root), str(summary_path))
+
+    assert result.auto_merge_ready
+    assert result.benchmark_is_current
+    assert result.reasons == []
 
 
 def test_init_submission_creates_agent_manifest(

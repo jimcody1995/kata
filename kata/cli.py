@@ -380,6 +380,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional timeout for each checks.sh run.",
     )
     submission_evaluate.add_argument(
+        "--sn60-project-key",
+        action="append",
+        default=None,
+        help="SN60 Bitsec project key to evaluate. Repeat for multiple projects.",
+    )
+    submission_evaluate.add_argument(
+        "--sn60-replicas-per-project",
+        type=int,
+        default=None,
+        help="Optional SN60 replica count per project.",
+    )
+    submission_evaluate.add_argument(
+        "--sn60-sandbox-root",
+        default=None,
+        help="Optional local SN60 sandbox root.",
+    )
+    submission_evaluate.add_argument(
+        "--sn60-benchmark-file",
+        default=None,
+        help="Optional SN60 benchmark JSON file path.",
+    )
+    submission_evaluate.add_argument(
+        "--sn60-sandbox-commit",
+        default=None,
+        help="Optional SN60 sandbox commit identifier.",
+    )
+    submission_evaluate.add_argument(
         "--json",
         action="store_true",
         help="Emit machine-readable JSON with the challenge summary path.",
@@ -590,6 +617,11 @@ def handle_submission_evaluate(args: argparse.Namespace) -> int:
         output_root=args.output_root,
         agent_timeout_seconds=args.agent_timeout_seconds,
         checks_timeout_seconds=args.checks_timeout_seconds,
+        sn60_project_keys=args.sn60_project_key,
+        sn60_replicas_per_project=args.sn60_replicas_per_project,
+        sn60_sandbox_root=args.sn60_sandbox_root,
+        sn60_benchmark_file=args.sn60_benchmark_file,
+        sn60_sandbox_commit=args.sn60_sandbox_commit,
     )
     if args.json:
         output_base = Path(args.output_root) if args.output_root else Path("runs")

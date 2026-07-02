@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import py_compile
 import re
 import tempfile
@@ -20,14 +21,19 @@ from kata.agent_bundle import (
 )
 from kata.benchmarks import ensure_active_repo_pack, resolve_eval_pack_path
 from kata.challenge import (
+    SN60_MINER_LANE_ID,
+    SN60_MINER_MODE,
+    SN60_VALIDATOR_MODEL,
     ChallengeSummary,
     current_holdout_pool_fingerprint,
     current_primary_pool_fingerprint,
     evaluate_promotion,
     load_challenge_summary,
     run_frontier_challenge,
+    run_sn60_challenge,
 )
 from kata.config import resolve_validator_model
+from kata.evaluators.sn60_bitsec import DEFAULT_REPLICAS_PER_PROJECT
 from kata.frontier import (
     load_frontier_manifest,
     promote_frontier_artifact,
@@ -343,6 +349,11 @@ def evaluate_submission(
     output_root: str | None = None,
     agent_timeout_seconds: int | None = None,
     checks_timeout_seconds: int | None = None,
+    sn60_project_keys: list[str] | None = None,
+    sn60_replicas_per_project: int | None = None,
+    sn60_sandbox_root: str | None = None,
+    sn60_benchmark_file: str | None = None,
+    sn60_sandbox_commit: str | None = None,
 ) -> ChallengeSummary:
     validation = validate_submission(submission_path)
     if (
@@ -355,6 +366,32 @@ def evaluate_submission(
             + "; ".join(validation.reasons or ["unknown validation failure"])
         )
 
+    if is_sn60_miner_metadata(validation.metadata):
+        project_keys = sn60_project_keys or parse_sn60_project_keys_from_env()
+        if not project_keys:
+            raise ValueError(
+                "SN60 miner evaluation requires at least one project key. "
+                "Pass --sn60-project-key or set KATA_SN60_PROJECT_KEYS."
+            )
+        manifest = load_frontier_manifest(validation.metadata.repo_pack)
+        mode_config = manifest.modes.get(validation.metadata.mode)
+        if mode_config is None:
+            raise ValueError(
+                f"Mode is not configured in frontier manifest: {validation.metadata.mode}"
+            )
+        return run_sn60_challenge(
+            frontier_artifact_path=str(resolve_artifact_path(mode_config.frontier_artifact)),
+            candidate_artifact_path=validation.submission_path,
+            project_keys=project_keys,
+            candidate_submission_id=validation.metadata.submission_id,
+            lane_id=validation.metadata.repo_pack,
+            output_root=output_root,
+            replicas_per_project=sn60_replicas_per_project or DEFAULT_REPLICAS_PER_PROJECT,
+            sandbox_root=sn60_sandbox_root,
+            benchmark_file=sn60_benchmark_file,
+            sandbox_commit=sn60_sandbox_commit,
+        )
+
     return run_frontier_challenge(
         eval_pack_path=validation.metadata.repo_pack,
         mode=validation.metadata.mode,
@@ -364,6 +401,15 @@ def evaluate_submission(
         agent_timeout_seconds=agent_timeout_seconds,
         checks_timeout_seconds=checks_timeout_seconds,
     )
+
+
+def parse_sn60_project_keys_from_env() -> list[str]:
+    configured = os.environ.get("KATA_SN60_PROJECT_KEYS", "")
+    return [part.strip() for part in configured.split(",") if part.strip()]
+
+
+def is_sn60_miner_metadata(metadata: SubmissionMetadata) -> bool:
+    return metadata.repo_pack == SN60_MINER_LANE_ID and metadata.mode == SN60_MINER_MODE
 
 
 def inspect_pull_request(
@@ -483,6 +529,48 @@ def verify_submission_result(
 
     candidate_hash = hash_submission_bundle(Path(validation.submission_path))
     current_frontier_hash = resolve_frontier_artifact_hash(mode_config)
+    if is_sn60_miner_metadata(validation.metadata):
+        submission_matches = (
+            summary.mode == validation.metadata.mode
+            and summary.candidate_artifact_hash == candidate_hash
+        )
+        frontier_is_current = summary.frontier_artifact_hash == current_frontier_hash
+        benchmark_is_current = summary.validator_model == SN60_VALIDATOR_MODEL
+        current_promotion_ready = summary.promotion_ready
+
+        reasons: list[str] = []
+        if not submission_matches:
+            reasons.append("Challenge result does not match the current submission payload.")
+        if not frontier_is_current:
+            reasons.append("Challenge result is stale because the frontier artifact has changed.")
+        if not benchmark_is_current:
+            reasons.append("Challenge result is stale because the SN60 benchmark lane has changed.")
+        if not current_promotion_ready:
+            reasons.append(f"Challenge is not promotion-ready: {summary.promotion_reason}")
+
+        return SubmissionVerificationResult(
+            submission_path=validation.submission_path,
+            challenge_summary_path=str(Path(challenge_summary_path).expanduser().resolve()),
+            repo_pack=validation.metadata.repo_pack,
+            mode=validation.metadata.mode,
+            submission_id=validation.metadata.submission_id,
+            candidate_artifact_hash=candidate_hash,
+            recorded_candidate_artifact_hash=summary.candidate_artifact_hash,
+            current_frontier_artifact_hash=current_frontier_hash,
+            recorded_frontier_artifact_hash=summary.frontier_artifact_hash,
+            current_validator_model=SN60_VALIDATOR_MODEL,
+            recorded_validator_model=summary.validator_model,
+            submission_matches_challenge=submission_matches,
+            frontier_is_current=frontier_is_current,
+            benchmark_is_current=benchmark_is_current,
+            promotion_ready=current_promotion_ready,
+            auto_merge_ready=submission_matches
+            and frontier_is_current
+            and benchmark_is_current
+            and current_promotion_ready,
+            reasons=reasons,
+        )
+
     current_validator_model = resolve_validator_model()
     current_primary_fingerprint = current_primary_pool_fingerprint(
         validation.metadata.repo_pack,
@@ -640,8 +728,14 @@ def promote_submission_result(
         )
 
     summary = load_challenge_summary(challenge_summary_path)
+    eval_pack_path = (
+        verification.repo_pack
+        if verification.repo_pack == SN60_MINER_LANE_ID
+        and verification.mode == SN60_MINER_MODE
+        else Path(summary.manifest_path).parent.as_posix()
+    )
     manifest = promote_frontier_artifact(
-        eval_pack_path=Path(summary.manifest_path).parent.as_posix(),
+        eval_pack_path=eval_pack_path,
         mode=summary.mode,
         candidate_artifact_path=verification.submission_path,
         source=summary.run_id,
