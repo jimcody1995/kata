@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from kata.agent_bundle import (
     AGENT_ENTRY_FILENAME,
     AGENT_MANIFEST_FILENAME,
@@ -15,6 +17,14 @@ from kata.frontier import (
     FrontierManifest,
     FrontierModeConfig,
     write_frontier_manifest,
+)
+from kata.lane_state import (
+    KING_STATE_SCHEMA_VERSION,
+    LANE_METADATA_SCHEMA_VERSION,
+    EvaluatorLaneMetadata,
+    LaneKingState,
+    write_lane_king_state,
+    write_lane_metadata,
 )
 from kata.provenance import pool_fingerprint, sha256_directory, sha256_text
 from kata.submissions import (
@@ -1640,3 +1650,100 @@ def test_promote_submission_result_rejects_stale_submission(
         assert "frontier artifact has changed" in str(exc)
     else:
         raise AssertionError("Expected stale submission promotion to be rejected.")
+
+
+def write_evaluator_lane(public_root: Path, *, active: bool = True) -> None:
+    write_lane_metadata(
+        EvaluatorLaneMetadata(
+            schema_version=LANE_METADATA_SCHEMA_VERSION,
+            lane_id="sn60__bitsec",
+            repo_pack="sn60__bitsec",
+            mode="miner",
+            evaluator_id="sn60_bitsec",
+            evaluator_policy_version="v1",
+            active=active,
+            created_at="2026-07-01T00:00:00+00:00",
+            updated_at="2026-07-01T00:00:00+00:00",
+        ),
+        public_root=str(public_root),
+    )
+
+
+def test_validate_submission_accepts_miner_submission_for_registry_lane(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    public_root = tmp_path / "kata-root"
+    write_evaluator_lane(public_root)
+    monkeypatch.setenv("KATA_ROOT", str(public_root))
+    monkeypatch.delenv("KATA_BENCHMARKS_ROOT", raising=False)
+
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="alice-20260702-01",
+        output_root=str(repo_root / "submissions"),
+        author="alice",
+    )
+    (submission_root / "agent.py").write_text(VALID_MINER_AGENT, encoding="utf-8")
+
+    result = validate_submission(str(submission_root), repo_root=str(repo_root))
+
+    assert result.reasons == []
+    assert result.is_valid
+
+
+def test_init_submission_rejects_inactive_registry_lane(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    public_root = tmp_path / "kata-root"
+    write_evaluator_lane(public_root, active=False)
+    monkeypatch.setenv("KATA_ROOT", str(public_root))
+    monkeypatch.delenv("KATA_BENCHMARKS_ROOT", raising=False)
+
+    with pytest.raises(ValueError, match="not active in the pack registry"):
+        init_submission(
+            repo_pack="sn60__bitsec",
+            mode="miner",
+            submission_id="alice-20260702-01",
+            output_root=str(tmp_path / "Kata" / "submissions"),
+        )
+
+
+def test_validate_submission_rejects_copy_of_lane_king(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    public_root = tmp_path / "kata-root"
+    write_evaluator_lane(public_root)
+    monkeypatch.setenv("KATA_ROOT", str(public_root))
+    monkeypatch.delenv("KATA_BENCHMARKS_ROOT", raising=False)
+
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="alice-20260702-01",
+        output_root=str(repo_root / "submissions"),
+    )
+    (submission_root / "agent.py").write_text(VALID_MINER_AGENT, encoding="utf-8")
+
+    write_lane_king_state(
+        "sn60__bitsec",
+        LaneKingState(
+            schema_version=KING_STATE_SCHEMA_VERSION,
+            current_king_submission_id="king-1",
+            current_king_artifact_hash=hash_submission_bundle(submission_root),
+            promotion_source_pr=None,
+            promotion_timestamp=None,
+            updated_at="2026-07-01T00:00:00+00:00",
+        ),
+        public_root=str(public_root),
+    )
+
+    result = validate_submission(str(submission_root), repo_root=str(repo_root))
+
+    assert any("exact copy of the current lane king" in reason for reason in result.reasons)
+    assert not result.is_valid

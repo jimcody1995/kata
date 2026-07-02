@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from kata.evaluators.sn60_bitsec import (
     Sn60ReplicaContext,
     build_bitsec_execution_command,
     extract_evaluation_metrics,
+    project_passes,
     resolve_sn60_sandbox_source,
     run_sn60_bitsec_duel,
 )
@@ -122,9 +126,18 @@ def test_run_sn60_bitsec_duel_stages_full_bundle_and_persists_outputs(tmp_path: 
     assert summary.sandbox_source.benchmark_file == str(benchmark_path.resolve())
     assert summary.frontier.invalid_runs == 1
     assert summary.candidate.invalid_runs == 1
-    assert summary.frontier.average_score == 0.1875
-    assert summary.candidate.average_score == 0.75
+    assert summary.frontier.average_detection_rate == 0.1875
+    assert summary.candidate.average_detection_rate == 0.75
     assert summary.candidate.pass_count == 3
+    # candidate passes project-alpha (2/2 runs) but not project-beta (1 pass, 1 invalid)
+    assert summary.candidate.codebase_pass_count == 1
+    assert summary.candidate.aggregated_score == 0.5
+    assert summary.frontier.codebase_pass_count == 0
+    assert summary.frontier.aggregated_score == 0.0
+    candidate_projects = {
+        project.project_key: project.passed for project in summary.candidate.project_summaries
+    }
+    assert candidate_projects == {"project-alpha": True, "project-beta": False}
 
     duel_summary_path = Path(summary.output_root) / "duel_summary.json"
     assert duel_summary_path.exists()
@@ -183,6 +196,63 @@ def test_build_bitsec_execution_command_mounts_bundle_and_sets_pythonpath(tmp_pa
     assert f"JOB_RUN_ID={context.run_id}" in command
     assert f"PROJECT_KEY={context.project_key}" in command
     assert command[-1] == "ghcr.io/bitsec-ai/project-alpha:latest"
+
+
+def test_project_passes_requires_two_of_three_runs() -> None:
+    assert project_passes(pass_count=2, replica_count=3)
+    assert project_passes(pass_count=3, replica_count=3)
+    assert not project_passes(pass_count=1, replica_count=3)
+    assert not project_passes(pass_count=0, replica_count=3)
+    assert project_passes(pass_count=1, replica_count=1)
+    assert not project_passes(pass_count=1, replica_count=2)
+    assert not project_passes(pass_count=0, replica_count=0)
+
+
+def test_resolve_sn60_sandbox_source_rejects_mismatched_pinned_commit(
+    tmp_path: Path,
+) -> None:
+    sandbox_root = tmp_path / "sandbox"
+    benchmark_path = write_sandbox_source(sandbox_root)
+    subprocess.run(["git", "init", "--quiet", str(sandbox_root)], check=True)
+    subprocess.run(["git", "-C", str(sandbox_root), "add", "-A"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(sandbox_root),
+            "-c",
+            "user.name=kata-test",
+            "-c",
+            "user.email=kata-test@example.com",
+            "commit",
+            "--quiet",
+            "-m",
+            "seed",
+        ],
+        check=True,
+    )
+    head = subprocess.run(
+        ["git", "-C", str(sandbox_root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    source = resolve_sn60_sandbox_source(
+        sandbox_root=str(sandbox_root),
+        benchmark_file=str(benchmark_path),
+        sandbox_commit=head,
+        scorer_version="ScaBenchScorerV2",
+    )
+    assert source.sandbox_commit == head
+
+    with pytest.raises(ValueError, match="does not match the checked-out sandbox"):
+        resolve_sn60_sandbox_source(
+            sandbox_root=str(sandbox_root),
+            benchmark_file=str(benchmark_path),
+            sandbox_commit="0" * 40,
+            scorer_version="ScaBenchScorerV2",
+        )
 
 
 def test_extract_evaluation_metrics_treats_non_success_as_zero_score() -> None:

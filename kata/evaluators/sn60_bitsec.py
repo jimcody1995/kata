@@ -68,7 +68,7 @@ class Sn60ProjectAggregate:
     successful_runs: int
     invalid_runs: int
     pass_count: int
-    average_score: float
+    passed: bool
     average_detection_rate: float
     true_positives: int
     total_expected: int
@@ -83,7 +83,8 @@ class Sn60VariantSummary:
     successful_runs: int
     invalid_runs: int
     pass_count: int
-    average_score: float
+    codebase_pass_count: int
+    aggregated_score: float
     average_detection_rate: float
     true_positives: int
     total_expected: int
@@ -255,6 +256,13 @@ def resolve_sn60_sandbox_source(
         raise FileNotFoundError(
             f"SN60 benchmark snapshot does not exist: {resolved_benchmark_file}"
         )
+    if sandbox_commit and (resolved_sandbox_root / ".git").exists():
+        actual_commit = resolve_git_commit(resolved_sandbox_root)
+        if actual_commit != sandbox_commit:
+            raise ValueError(
+                "Pinned SN60 sandbox commit does not match the checked-out sandbox: "
+                f"pinned {sandbox_commit}, actual {actual_commit}."
+            )
     resolved_commit = sandbox_commit or resolve_git_commit(resolved_sandbox_root)
     return Sn60SandboxSource(
         sandbox_root=str(resolved_sandbox_root),
@@ -269,6 +277,9 @@ def resolve_sn60_sandbox_source(
 
 
 def default_sandbox_root() -> Path:
+    env_root = os.environ.get("KATA_SN60_SANDBOX_ROOT")
+    if env_root and env_root.strip():
+        return Path(env_root).expanduser().resolve()
     return workspace_root() / "sandbox"
 
 
@@ -335,8 +346,8 @@ def summarize_variant(
         )
         for project_key in project_keys
     ]
-    scores = [result.score for result in replica_results]
     detection_rates = [result.detection_rate for result in replica_results]
+    codebase_pass_count = sum(1 for project in project_summaries if project.passed)
     return Sn60VariantSummary(
         variant_name=variant_name,
         artifact_path=str(artifact_root),
@@ -346,7 +357,12 @@ def summarize_variant(
         ),
         invalid_runs=sum(1 for result in replica_results if result.evaluation_status != "success"),
         pass_count=sum(1 for result in replica_results if result.result == "PASS"),
-        average_score=fmean(scores) if scores else 0.0,
+        codebase_pass_count=codebase_pass_count,
+        # `aggregated score` per the SN60 spec: passed codebases / total codebases.
+        # V1 runs one local validator replica-set, so this equals its validator score.
+        aggregated_score=(
+            codebase_pass_count / len(project_summaries) if project_summaries else 0.0
+        ),
         average_detection_rate=fmean(detection_rates) if detection_rates else 0.0,
         true_positives=sum(result.true_positives for result in replica_results),
         total_expected=sum(result.total_expected for result in replica_results),
@@ -361,8 +377,8 @@ def summarize_project(
     project_key: str,
     replica_results: list[Sn60ReplicaResult],
 ) -> Sn60ProjectAggregate:
-    scores = [result.score for result in replica_results]
     detection_rates = [result.detection_rate for result in replica_results]
+    pass_count = sum(1 for result in replica_results if result.result == "PASS")
     return Sn60ProjectAggregate(
         project_key=project_key,
         replica_count=len(replica_results),
@@ -370,13 +386,23 @@ def summarize_project(
             1 for result in replica_results if result.evaluation_status == "success"
         ),
         invalid_runs=sum(1 for result in replica_results if result.evaluation_status != "success"),
-        pass_count=sum(1 for result in replica_results if result.result == "PASS"),
-        average_score=fmean(scores) if scores else 0.0,
+        pass_count=pass_count,
+        passed=project_passes(pass_count=pass_count, replica_count=len(replica_results)),
         average_detection_rate=fmean(detection_rates) if detection_rates else 0.0,
         true_positives=sum(result.true_positives for result in replica_results),
         total_expected=sum(result.total_expected for result in replica_results),
         total_found=sum(result.total_found for result in replica_results),
     )
+
+
+def project_passes(*, pass_count: int, replica_count: int) -> bool:
+    """Codebase-level binary pass per the SN60 rule: at least 2 of 3 runs must pass.
+
+    Generalized to other replica counts as pass_count/replica_count >= 2/3.
+    """
+    if replica_count <= 0:
+        return False
+    return pass_count * 3 >= replica_count * 2
 
 
 def build_replica_result(

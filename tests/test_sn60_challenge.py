@@ -108,8 +108,9 @@ def test_run_sn60_challenge_decides_winner_and_records_lane_provenance(
 
     assert summary.mode == "miner"
     assert summary.promotion_ready
-    assert summary.primary.variant_scores == {"frontier": 25.0, "candidate": 100.0}
-    assert summary.primary.variant_successes == {"frontier": 0, "candidate": 2}
+    assert summary.primary.variant_scores == {"frontier": 0.0, "candidate": 100.0}
+    assert summary.primary.variant_successes == {"frontier": 0, "candidate": 1}
+    assert summary.primary.total_task_weight == 1.0
     assert summary.primary.candidate_beats_frontier
     assert summary.primary_pool_fingerprint
 
@@ -131,6 +132,10 @@ def test_run_sn60_challenge_decides_winner_and_records_lane_provenance(
     assert challenge_state.freshness_fingerprint == summary.primary_pool_fingerprint
     assert promotion_record.final_winner == "candidate"
     assert promotion_record.final_metrics["promotion_ready"] is True
+    assert promotion_record.final_metrics["candidate_aggregated_score"] == 1.0
+    assert promotion_record.final_metrics["frontier_aggregated_score"] == 0.0
+    assert promotion_record.final_metrics["candidate_average_score"] == 1.0
+    assert promotion_record.pass_counts == {"frontier": 0, "candidate": 1}
     assert promotion_record.local_replica_scores["candidate"] == [1.0, 1.0]
     assert (
         Path(summary.manifest_path).with_name("screening_result.json")
@@ -138,8 +143,12 @@ def test_run_sn60_challenge_decides_winner_and_records_lane_provenance(
 
 
 def test_evaluate_sn60_promotion_rejects_invalid_candidate() -> None:
-    frontier = build_variant("frontier", average_score=0.5, pass_count=1, invalid_runs=0)
-    candidate = build_variant("candidate", average_score=1.0, pass_count=2, invalid_runs=1)
+    frontier = build_variant(
+        "frontier", aggregated_score=0.5, codebase_pass_count=1, invalid_runs=0
+    )
+    candidate = build_variant(
+        "candidate", aggregated_score=1.0, codebase_pass_count=2, invalid_runs=1
+    )
 
     decision = evaluate_sn60_promotion(frontier=frontier, candidate=candidate)
 
@@ -151,15 +160,35 @@ def test_evaluate_sn60_promotion_rejects_invalid_candidate() -> None:
 def test_evaluate_sn60_promotion_uses_pass_count_as_score_tiebreaker() -> None:
     frontier = build_variant(
         "frontier",
-        average_score=0.5,
-        pass_count=1,
+        aggregated_score=0.5,
+        codebase_pass_count=1,
         true_positives=4,
     )
     candidate = build_variant(
         "candidate",
-        average_score=0.5,
-        pass_count=2,
+        aggregated_score=0.5,
+        codebase_pass_count=2,
         true_positives=4,
+    )
+
+    decision = evaluate_sn60_promotion(frontier=frontier, candidate=candidate)
+
+    assert decision.promotion_ready
+    assert decision.final_winner == "candidate"
+
+
+def test_evaluate_sn60_promotion_uses_true_positives_as_final_tiebreaker() -> None:
+    frontier = build_variant(
+        "frontier",
+        aggregated_score=0.5,
+        codebase_pass_count=1,
+        true_positives=4,
+    )
+    candidate = build_variant(
+        "candidate",
+        aggregated_score=0.5,
+        codebase_pass_count=1,
+        true_positives=6,
     )
 
     decision = evaluate_sn60_promotion(frontier=frontier, candidate=candidate)
@@ -296,8 +325,8 @@ def test_run_sn60_challenge_stops_before_duel_when_screening_fails(
 def build_variant(
     variant_name: str,
     *,
-    average_score: float,
-    pass_count: int,
+    aggregated_score: float,
+    codebase_pass_count: int,
     true_positives: int = 0,
     invalid_runs: int = 0,
 ) -> Sn60VariantSummary:
@@ -309,9 +338,9 @@ def build_variant(
             evaluation_path="/tmp/evaluation.json",
             execution_success=True,
             evaluation_status="success" if invalid_runs == 0 else "error",
-            score=average_score,
-            detection_rate=average_score,
-            result="PASS" if pass_count else "FAIL",
+            score=aggregated_score,
+            detection_rate=aggregated_score,
+            result="PASS" if codebase_pass_count else "FAIL",
             true_positives=true_positives,
             total_expected=4,
             total_found=true_positives,
@@ -323,9 +352,10 @@ def build_variant(
         artifact_hash=f"{variant_name}-hash",
         successful_runs=1 - invalid_runs,
         invalid_runs=invalid_runs,
-        pass_count=pass_count,
-        average_score=average_score,
-        average_detection_rate=average_score,
+        pass_count=codebase_pass_count,
+        codebase_pass_count=codebase_pass_count,
+        aggregated_score=aggregated_score,
+        average_detection_rate=aggregated_score,
         true_positives=true_positives,
         total_expected=4,
         total_found=true_positives,
@@ -335,9 +365,9 @@ def build_variant(
                 replica_count=1,
                 successful_runs=1 - invalid_runs,
                 invalid_runs=invalid_runs,
-                pass_count=pass_count,
-                average_score=average_score,
-                average_detection_rate=average_score,
+                pass_count=codebase_pass_count,
+                passed=bool(codebase_pass_count),
+                average_detection_rate=aggregated_score,
                 true_positives=true_positives,
                 total_expected=4,
                 total_found=true_positives,

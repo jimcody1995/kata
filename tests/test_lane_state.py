@@ -9,6 +9,7 @@ from kata.lane_state import (
     CHALLENGE_STATE_SCHEMA_VERSION,
     KING_STATE_SCHEMA_VERSION,
     LANE_METADATA_SCHEMA_VERSION,
+    PACK_REGISTRY_SCHEMA_VERSION,
     PROMOTION_RECORD_SCHEMA_VERSION,
     BenchmarkSnapshotState,
     ChallengeState,
@@ -22,9 +23,12 @@ from kata.lane_state import (
     load_evaluator_lane_state,
     load_lane_king_state,
     load_lane_metadata,
+    load_pack_registry,
     load_promotion_record,
+    pack_registry_path,
     resolve_lane_root,
     resolve_lanes_root,
+    sync_pack_registry,
     validate_lane_id,
     write_benchmark_snapshot,
     write_challenge_state,
@@ -203,3 +207,82 @@ def test_load_lane_metadata_requires_boolean_active_field(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="JSON boolean"):
         load_lane_metadata("sn60__bitsec", public_root=str(tmp_path))
+
+
+def build_lane_metadata(
+    lane_id: str,
+    *,
+    active: bool = True,
+    evaluator_id: str = "sn60_bitsec",
+    updated_at: str = "2026-07-01T00:00:00+00:00",
+) -> EvaluatorLaneMetadata:
+    return EvaluatorLaneMetadata(
+        schema_version=LANE_METADATA_SCHEMA_VERSION,
+        lane_id=lane_id,
+        repo_pack=lane_id,
+        mode="miner",
+        evaluator_id=evaluator_id,
+        evaluator_policy_version="v1",
+        active=active,
+        created_at="2026-07-01T00:00:00+00:00",
+        updated_at=updated_at,
+    )
+
+
+def test_write_lane_metadata_registers_pack_in_central_registry(tmp_path: Path) -> None:
+    write_lane_metadata(build_lane_metadata("sn60__bitsec"), public_root=str(tmp_path))
+
+    registry_path = pack_registry_path(public_root=str(tmp_path))
+    assert registry_path == resolve_lanes_root(str(tmp_path)) / "registry.json"
+    assert registry_path.exists()
+
+    registry = load_pack_registry(public_root=str(tmp_path))
+    assert registry.schema_version == PACK_REGISTRY_SCHEMA_VERSION
+    assert [pack.lane_id for pack in registry.packs] == ["sn60__bitsec"]
+    assert registry.packs[0].evaluator_id == "sn60_bitsec"
+    assert registry.packs[0].active is True
+
+
+def test_lane_discovery_uses_registry_only(tmp_path: Path) -> None:
+    write_lane_metadata(build_lane_metadata("sn60__bitsec"), public_root=str(tmp_path))
+
+    # A lane directory with valid lane.json but no registry entry must NOT be
+    # discovered: the central registry is the only discovery source.
+    orphan_root = resolve_lanes_root(str(tmp_path)) / "orphan__lane"
+    orphan_root.mkdir(parents=True)
+    (orphan_root / "lane.json").write_text(
+        (resolve_lane_root("sn60__bitsec", public_root=str(tmp_path)) / "lane.json")
+        .read_text(encoding="utf-8")
+        .replace("sn60__bitsec", "orphan__lane"),
+        encoding="utf-8",
+    )
+
+    assert list_lane_ids(public_root=str(tmp_path)) == ["sn60__bitsec"]
+    assert discover_active_lane_ids(public_root=str(tmp_path)) == ["sn60__bitsec"]
+
+    # After a registry sync the orphan lane is registered again.
+    sync_pack_registry(public_root=str(tmp_path))
+    assert list_lane_ids(public_root=str(tmp_path)) == ["orphan__lane", "sn60__bitsec"]
+
+
+def test_registry_upsert_updates_active_flag_without_duplicates(tmp_path: Path) -> None:
+    write_lane_metadata(build_lane_metadata("sn60__bitsec"), public_root=str(tmp_path))
+    write_lane_metadata(
+        build_lane_metadata(
+            "sn60__bitsec", active=False, updated_at="2026-07-02T00:00:00+00:00"
+        ),
+        public_root=str(tmp_path),
+    )
+
+    registry = load_pack_registry(public_root=str(tmp_path))
+    assert [pack.lane_id for pack in registry.packs] == ["sn60__bitsec"]
+    assert registry.packs[0].active is False
+    assert registry.updated_at == "2026-07-02T00:00:00+00:00"
+    assert discover_active_lane_ids(public_root=str(tmp_path)) == []
+
+
+def test_load_pack_registry_returns_empty_registry_when_missing(tmp_path: Path) -> None:
+    registry = load_pack_registry(public_root=str(tmp_path))
+    assert registry.packs == []
+    assert list_lane_ids(public_root=str(tmp_path)) == []
+    assert discover_active_lane_ids(public_root=str(tmp_path)) == []

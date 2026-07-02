@@ -168,7 +168,14 @@ def validate_sn60_static_screening(candidate_root: str | Path) -> list[str]:
 
     agent_main = find_module_function_def(tree, "agent_main")
     if agent_main is None:
-        reasons.append("Submission agent must define agent_main(...).")
+        if find_module_async_function_def(tree, "agent_main") is not None:
+            reasons.append(
+                "Submission agent_main must be a synchronous function; the SN60 "
+                "sandbox runner calls agent_main() directly and does not await "
+                "coroutines."
+            )
+        else:
+            reasons.append("Submission agent must define agent_main(...).")
     elif not function_supports_no_arg_invocation(agent_main):
         reasons.append("Submission agent must support no-argument invocation: agent_main().")
 
@@ -275,6 +282,18 @@ def find_module_function_def(
         return None
     for node in module_tree.body:
         if isinstance(node, ast.FunctionDef) and node.name == function_name:
+            return node
+    return None
+
+
+def find_module_async_function_def(
+    module_tree: ast.AST,
+    function_name: str,
+) -> ast.AsyncFunctionDef | None:
+    if not isinstance(module_tree, ast.Module):
+        return None
+    for node in module_tree.body:
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == function_name:
             return node
     return None
 

@@ -23,9 +23,19 @@ from kata.frontier import (
     render_frontier_json,
     render_frontier_manifest,
 )
+from kata.lane_state import (
+    LANE_METADATA_SCHEMA_VERSION,
+    EvaluatorLaneMetadata,
+    lane_metadata_path,
+    load_lane_metadata,
+    load_pack_registry,
+    sync_pack_registry,
+    write_lane_metadata,
+)
 from kata.oracle import main as oracle_main
 from kata.reporting import render_report
 from kata.submissions import (
+    SUPPORTED_SUBMISSION_MODES,
     decide_submission_action,
     evaluate_submission,
     init_submission,
@@ -237,6 +247,71 @@ def build_parser() -> argparse.ArgumentParser:
     registry_show.add_argument("--json", action="store_true")
     registry_show.set_defaults(handler=handle_registry_show)
 
+    lane = subparsers.add_parser(
+        "lane",
+        help="Manage evaluator-backed subnet packs and the central pack registry.",
+    )
+    lane_subparsers = lane.add_subparsers(dest="lane_command", required=True)
+
+    lane_init = lane_subparsers.add_parser(
+        "init",
+        help="Create or update an evaluator-backed lane and register it in the pack registry.",
+    )
+    lane_init.add_argument("--lane-id", required=True, help="Lane id, e.g. sn60__bitsec.")
+    lane_init.add_argument("--repo-pack", default=None, help="Repo pack id. Defaults to lane id.")
+    lane_init.add_argument("--mode", default="miner", help="Submission mode for the lane.")
+    lane_init.add_argument(
+        "--evaluator-id",
+        required=True,
+        help="Evaluator adapter id for the lane, e.g. sn60_bitsec.",
+    )
+    lane_init.add_argument(
+        "--policy-version",
+        default="v1",
+        help="Evaluator policy version recorded in lane metadata.",
+    )
+    lane_init.add_argument(
+        "--inactive",
+        action="store_true",
+        help="Register the lane without activating it.",
+    )
+    lane_init.add_argument(
+        "--public-root",
+        default=None,
+        help="Optional Kata root that owns the lanes directory.",
+    )
+    lane_init.add_argument("--json", action="store_true")
+    lane_init.set_defaults(handler=handle_lane_init)
+
+    lane_list = lane_subparsers.add_parser(
+        "list",
+        help="List subnet packs from the central pack registry.",
+    )
+    lane_list.add_argument(
+        "--active-only",
+        action="store_true",
+        help="Only list packs marked active in the registry.",
+    )
+    lane_list.add_argument(
+        "--public-root",
+        default=None,
+        help="Optional Kata root that owns the lanes directory.",
+    )
+    lane_list.add_argument("--json", action="store_true")
+    lane_list.set_defaults(handler=handle_lane_list)
+
+    lane_sync = lane_subparsers.add_parser(
+        "sync-registry",
+        help="Rebuild the central pack registry from lane.json files on disk.",
+    )
+    lane_sync.add_argument(
+        "--public-root",
+        default=None,
+        help="Optional Kata root that owns the lanes directory.",
+    )
+    lane_sync.add_argument("--json", action="store_true")
+    lane_sync.set_defaults(handler=handle_lane_sync_registry)
+
     report = subparsers.add_parser("report", help="Render an eval report.")
     report.add_argument("--run", required=True, help="Run id or path to run artifacts.")
     report.set_defaults(handler=handle_report)
@@ -263,7 +338,7 @@ def build_parser() -> argparse.ArgumentParser:
     submission_init.add_argument("--repo-pack", required=True, help="Target repo pack id.")
     submission_init.add_argument(
         "--mode",
-        choices=["contributor", "reviewer"],
+        choices=sorted(SUPPORTED_SUBMISSION_MODES),
         required=True,
         help="Competition mode for the challenger submission.",
     )
@@ -657,6 +732,76 @@ def handle_submission_decide(args: argparse.Namespace) -> int:
         else render_submission_decision(result)
     )
     return 0 if result.action == "merge" else 2
+
+
+def handle_lane_init(args: argparse.Namespace) -> int:
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC).isoformat()
+    created_at = now
+    if lane_metadata_path(args.lane_id, public_root=args.public_root).exists():
+        created_at = load_lane_metadata(args.lane_id, public_root=args.public_root).created_at
+    metadata = EvaluatorLaneMetadata(
+        schema_version=LANE_METADATA_SCHEMA_VERSION,
+        lane_id=args.lane_id,
+        repo_pack=args.repo_pack or args.lane_id,
+        mode=args.mode,
+        evaluator_id=args.evaluator_id,
+        evaluator_policy_version=args.policy_version,
+        active=not args.inactive,
+        created_at=created_at,
+        updated_at=now,
+    )
+    path = write_lane_metadata(metadata, public_root=args.public_root)
+    if args.json:
+        print_json({"lane_metadata_path": str(path), "lane_id": metadata.lane_id})
+    else:
+        print(f"Registered lane `{metadata.lane_id}` at {path}")
+    return 0
+
+
+def handle_lane_list(args: argparse.Namespace) -> int:
+    registry = load_pack_registry(public_root=args.public_root)
+    packs = [pack for pack in registry.packs if pack.active or not args.active_only]
+    if args.json:
+        print_json(
+            {
+                "schema_version": registry.schema_version,
+                "updated_at": registry.updated_at,
+                "packs": [
+                    {
+                        "lane_id": pack.lane_id,
+                        "repo_pack": pack.repo_pack,
+                        "mode": pack.mode,
+                        "evaluator_id": pack.evaluator_id,
+                        "active": pack.active,
+                    }
+                    for pack in packs
+                ],
+            }
+        )
+        return 0
+    if not packs:
+        print("No subnet packs registered.")
+        return 0
+    for pack in packs:
+        status = "active" if pack.active else "inactive"
+        print(f"{pack.lane_id}  mode={pack.mode}  evaluator={pack.evaluator_id}  {status}")
+    return 0
+
+
+def handle_lane_sync_registry(args: argparse.Namespace) -> int:
+    registry = sync_pack_registry(public_root=args.public_root)
+    if args.json:
+        print_json(
+            {
+                "packs": [pack.lane_id for pack in registry.packs],
+                "updated_at": registry.updated_at,
+            }
+        )
+    else:
+        print(f"Synced pack registry with {len(registry.packs)} lane(s).")
+    return 0
 
 
 def collect_changed_paths(

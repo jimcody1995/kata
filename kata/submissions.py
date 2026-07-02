@@ -39,6 +39,12 @@ from kata.frontier import (
     promote_frontier_artifact,
     resolve_frontier_artifact_hash,
 )
+from kata.lane_state import (
+    PackRegistryEntry,
+    lane_king_state_path,
+    load_lane_king_state,
+    load_pack_registry,
+)
 from kata.provenance import sha256_directory
 from kata.public_artifacts import publish_public_king, resolve_artifact_path
 from kata.screening import validate_sn60_static_screening
@@ -987,7 +993,29 @@ def validate_submission_candidate(
     return dedupe(reasons)
 
 
+def find_evaluator_pack_entry(repo_pack: str, mode: str) -> PackRegistryEntry | None:
+    try:
+        registry = load_pack_registry()
+    except ValueError:
+        return None
+    for pack in registry.packs:
+        if pack.repo_pack == repo_pack and pack.mode == mode:
+            return pack
+    return None
+
+
 def validate_submission_lane(repo_pack: str, mode: str) -> list[str]:
+    # Evaluator-backed subnet packs are validated against the central pack
+    # registry and must not depend on eval-pack or frontier-manifest state.
+    evaluator_entry = find_evaluator_pack_entry(repo_pack, mode)
+    if evaluator_entry is not None:
+        if not evaluator_entry.active:
+            return [
+                "Evaluator-backed lane is not active in the pack registry: "
+                f"{evaluator_entry.lane_id}"
+            ]
+        return []
+
     reasons: list[str] = []
     try:
         ensure_active_repo_pack(repo_pack)
@@ -1162,7 +1190,7 @@ def required_submission_entrypoint_reason(mode: str) -> str:
 
 def agent_defines_required_entrypoint(agent_source: str, mode: str) -> bool:
     pattern = re.compile(
-        rf"(?m)^def\s+{re.escape(submission_entrypoint_name(mode))}\s*\("
+        rf"(?m)^(?:async\s+)?def\s+{re.escape(submission_entrypoint_name(mode))}\s*\("
     )
     return pattern.search(agent_source) is not None
 
@@ -1352,6 +1380,12 @@ def validate_bundle_miner_contract(parsed_trees: dict[str, ast.AST]) -> list[str
         return []
     agent_main_fn = find_module_function_def(agent_tree, "agent_main")
     if agent_main_fn is None:
+        if find_module_async_function_def(agent_tree, "agent_main") is not None:
+            return [
+                "Submission agent_main must be a synchronous function; the SN60 "
+                "sandbox runner calls agent_main() directly and does not await "
+                "coroutines."
+            ]
         return [required_submission_entrypoint_reason("miner")]
 
     positional_args = [*agent_main_fn.args.posonlyargs, *agent_main_fn.args.args]
@@ -1455,13 +1489,35 @@ def find_module_function_def(
     return None
 
 
+def find_module_async_function_def(
+    module_tree: ast.AST,
+    function_name: str,
+) -> ast.AsyncFunctionDef | None:
+    if not isinstance(module_tree, ast.Module):
+        return None
+    for node in module_tree.body:
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == function_name:
+            return node
+    return None
+
+
 def validate_submission_not_copycat(
     *,
     metadata: SubmissionMetadata,
     submission_root: Path,
     bundle_files: dict[str, str],
 ) -> list[str]:
-    manifest = load_frontier_manifest(metadata.repo_pack)
+    evaluator_entry = find_evaluator_pack_entry(metadata.repo_pack, metadata.mode)
+    if evaluator_entry is not None:
+        return validate_submission_not_copycat_of_lane_king(
+            lane_id=evaluator_entry.lane_id,
+            submission_root=submission_root,
+        )
+
+    try:
+        manifest = load_frontier_manifest(metadata.repo_pack)
+    except FileNotFoundError:
+        return []
     mode_config = manifest.modes.get(metadata.mode)
     if mode_config is None:
         return []
@@ -1487,6 +1543,24 @@ def validate_submission_not_copycat(
             "Submission agent duplicates the current frontier agent implementation."
         )
     return reasons
+
+
+def validate_submission_not_copycat_of_lane_king(
+    *,
+    lane_id: str,
+    submission_root: Path,
+) -> list[str]:
+    if not lane_king_state_path(lane_id).exists():
+        return []
+    king = load_lane_king_state(lane_id)
+    if king.current_king_artifact_hash is None:
+        return []
+    candidate_hash = hash_submission_bundle(submission_root)
+    if candidate_hash == king.current_king_artifact_hash:
+        return [
+            "Submission bundle is an exact copy of the current lane king artifact."
+        ]
+    return []
 
 
 def python_sources_equivalent(left: str, right: str) -> bool:

@@ -49,6 +49,21 @@ def test_validate_sn60_static_screening_rejects_helper_files_and_leak_tokens(
     assert any("benchmark-answer leakage token" in reason for reason in reasons)
 
 
+def test_validate_sn60_static_screening_rejects_async_agent_main(
+    tmp_path: Path,
+) -> None:
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "async def agent_main(project_dir=None, inference_api=None):\n"
+        "    return {'vulnerabilities': []}\n",
+    )
+
+    reasons = validate_sn60_static_screening(bundle_root)
+
+    assert any("must be a synchronous function" in reason for reason in reasons)
+
+
 def test_run_sn60_screening_persists_static_failure_without_execution(
     tmp_path: Path,
 ) -> None:

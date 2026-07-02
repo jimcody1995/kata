@@ -7,17 +7,35 @@ from pathlib import Path
 from kata.public_artifacts import resolve_kata_root
 
 LANES_DIRNAME = "lanes"
+PACK_REGISTRY_FILENAME = "registry.json"
 LANE_METADATA_FILENAME = "lane.json"
 KING_STATE_FILENAME = "king.json"
 BENCHMARK_SNAPSHOT_FILENAME = "benchmark_snapshot.json"
 CHALLENGE_STATE_FILENAME = "challenge_state.json"
 PROMOTION_RECORD_FILENAME = "promotion_record.json"
 
+PACK_REGISTRY_SCHEMA_VERSION = 1
 LANE_METADATA_SCHEMA_VERSION = 1
 KING_STATE_SCHEMA_VERSION = 1
 BENCHMARK_SNAPSHOT_SCHEMA_VERSION = 1
 CHALLENGE_STATE_SCHEMA_VERSION = 1
 PROMOTION_RECORD_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True)
+class PackRegistryEntry:
+    lane_id: str
+    repo_pack: str
+    mode: str
+    evaluator_id: str
+    active: bool
+
+
+@dataclass(frozen=True)
+class PackRegistry:
+    schema_version: int
+    packs: list[PackRegistryEntry]
+    updated_at: str
 
 
 @dataclass(frozen=True)
@@ -97,6 +115,85 @@ def resolve_lanes_root(public_root: str | None = None) -> Path:
     return resolve_kata_root(public_root) / LANES_DIRNAME
 
 
+def pack_registry_path(*, public_root: str | None = None) -> Path:
+    return resolve_lanes_root(public_root) / PACK_REGISTRY_FILENAME
+
+
+def load_pack_registry(*, public_root: str | None = None) -> PackRegistry:
+    path = pack_registry_path(public_root=public_root)
+    if not path.exists():
+        return PackRegistry(
+            schema_version=PACK_REGISTRY_SCHEMA_VERSION,
+            packs=[],
+            updated_at="",
+        )
+    return parse_pack_registry(read_json(path))
+
+
+def write_pack_registry(
+    registry: PackRegistry,
+    *,
+    public_root: str | None = None,
+) -> Path:
+    return write_json_dataclass(pack_registry_path(public_root=public_root), registry)
+
+
+def upsert_pack_registry_entry(
+    metadata: EvaluatorLaneMetadata,
+    *,
+    public_root: str | None = None,
+) -> Path:
+    registry = load_pack_registry(public_root=public_root)
+    entry = PackRegistryEntry(
+        lane_id=metadata.lane_id,
+        repo_pack=metadata.repo_pack,
+        mode=metadata.mode,
+        evaluator_id=metadata.evaluator_id,
+        active=metadata.active,
+    )
+    packs = [pack for pack in registry.packs if pack.lane_id != entry.lane_id]
+    packs.append(entry)
+    packs.sort(key=lambda pack: pack.lane_id)
+    return write_pack_registry(
+        PackRegistry(
+            schema_version=PACK_REGISTRY_SCHEMA_VERSION,
+            packs=packs,
+            updated_at=metadata.updated_at,
+        ),
+        public_root=public_root,
+    )
+
+
+def sync_pack_registry(*, public_root: str | None = None) -> PackRegistry:
+    """Rebuild the pack registry from lane.json files on disk (migration/repair)."""
+    lanes_root = resolve_lanes_root(public_root)
+    packs: list[PackRegistryEntry] = []
+    latest_updated_at = ""
+    if lanes_root.exists():
+        for child in sorted(lanes_root.iterdir(), key=lambda item: item.name):
+            metadata_path = child / LANE_METADATA_FILENAME
+            if not child.is_dir() or not metadata_path.exists():
+                continue
+            metadata = parse_lane_metadata(read_json(metadata_path))
+            packs.append(
+                PackRegistryEntry(
+                    lane_id=metadata.lane_id,
+                    repo_pack=metadata.repo_pack,
+                    mode=metadata.mode,
+                    evaluator_id=metadata.evaluator_id,
+                    active=metadata.active,
+                )
+            )
+            latest_updated_at = max(latest_updated_at, metadata.updated_at)
+    registry = PackRegistry(
+        schema_version=PACK_REGISTRY_SCHEMA_VERSION,
+        packs=packs,
+        updated_at=latest_updated_at,
+    )
+    write_pack_registry(registry, public_root=public_root)
+    return registry
+
+
 def resolve_lane_root(lane_id: str, *, public_root: str | None = None) -> Path:
     validate_lane_id(lane_id)
     return resolve_lanes_root(public_root) / lane_id
@@ -128,7 +225,11 @@ def write_lane_metadata(
     public_root: str | None = None,
 ) -> Path:
     path = lane_metadata_path(metadata.lane_id, public_root=public_root)
-    return write_json_dataclass(path, metadata)
+    written = write_json_dataclass(path, metadata)
+    # The central pack registry is the only discovery source; keep it in sync
+    # with every lane metadata write.
+    upsert_pack_registry_entry(metadata, public_root=public_root)
+    return written
 
 
 def write_lane_king_state(
@@ -243,25 +344,13 @@ def load_evaluator_lane_state(
 
 
 def list_lane_ids(*, public_root: str | None = None) -> list[str]:
-    lanes_root = resolve_lanes_root(public_root)
-    if not lanes_root.exists():
-        return []
-    lane_ids: list[str] = []
-    for child in sorted(lanes_root.iterdir(), key=lambda item: item.name):
-        if not child.is_dir():
-            continue
-        if (child / LANE_METADATA_FILENAME).exists():
-            lane_ids.append(child.name)
-    return lane_ids
+    registry = load_pack_registry(public_root=public_root)
+    return [pack.lane_id for pack in registry.packs]
 
 
 def discover_active_lane_ids(*, public_root: str | None = None) -> list[str]:
-    active: list[str] = []
-    for lane_id in list_lane_ids(public_root=public_root):
-        metadata = load_lane_metadata(lane_id, public_root=public_root)
-        if metadata.active:
-            active.append(lane_id)
-    return active
+    registry = load_pack_registry(public_root=public_root)
+    return [pack.lane_id for pack in registry.packs if pack.active]
 
 
 def validate_lane_id(lane_id: str) -> None:
@@ -294,6 +383,32 @@ def read_json(path: Path) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError(f"Expected a JSON object in {path}.")
     return payload
+
+
+def parse_pack_registry(payload: dict[str, object]) -> PackRegistry:
+    packs_payload = payload.get("packs")
+    if not isinstance(packs_payload, list):
+        raise ValueError("Pack registry requires `packs` to be a JSON array.")
+    packs: list[PackRegistryEntry] = []
+    for entry in packs_payload:
+        if not isinstance(entry, dict):
+            raise ValueError("Pack registry entries must be JSON objects.")
+        lane_id = str(entry["lane_id"])
+        validate_lane_id(lane_id)
+        packs.append(
+            PackRegistryEntry(
+                lane_id=lane_id,
+                repo_pack=str(entry["repo_pack"]),
+                mode=str(entry["mode"]),
+                evaluator_id=str(entry["evaluator_id"]),
+                active=require_bool(entry["active"], field_name="active"),
+            )
+        )
+    return PackRegistry(
+        schema_version=int(payload["schema_version"]),
+        packs=packs,
+        updated_at=str(payload.get("updated_at", "")),
+    )
 
 
 def parse_lane_metadata(payload: dict[str, object]) -> EvaluatorLaneMetadata:

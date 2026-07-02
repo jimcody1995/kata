@@ -427,8 +427,8 @@ def sn60_duel_to_pool_summary(
     eval_run_summary: Path,
     screening_result: dict[str, object] | None = None,
 ) -> ChallengePoolSummary:
-    frontier_score = round(duel_summary.frontier.average_score * 100, 2)
-    candidate_score = round(duel_summary.candidate.average_score * 100, 2)
+    frontier_score = round(duel_summary.frontier.aggregated_score * 100, 2)
+    candidate_score = round(duel_summary.candidate.aggregated_score * 100, 2)
     decision = evaluate_sn60_promotion(
         frontier=duel_summary.frontier,
         candidate=duel_summary.candidate,
@@ -437,10 +437,10 @@ def sn60_duel_to_pool_summary(
     return ChallengePoolSummary(
         task_ids=list(duel_summary.project_keys),
         eval_run_summary=str(eval_run_summary),
-        total_task_weight=float(len(duel_summary.project_keys) * duel_summary.replicas_per_project),
+        total_task_weight=float(len(duel_summary.project_keys)),
         variant_successes={
-            "frontier": duel_summary.frontier.pass_count,
-            "candidate": duel_summary.candidate.pass_count,
+            "frontier": duel_summary.frontier.codebase_pass_count,
+            "candidate": duel_summary.candidate.codebase_pass_count,
         },
         variant_invalid_tasks={
             "frontier": duel_summary.frontier.invalid_runs,
@@ -542,9 +542,11 @@ def evaluate_sn60_promotion(
 
 
 def sn60_variant_rank(summary: Sn60VariantSummary) -> tuple[float, int, int, int]:
+    # Promotion comparator per the frozen SN60 spec:
+    # aggregated score first, codebase pass count second, true positives third.
     return (
-        round(summary.average_score, 8),
-        summary.pass_count,
+        round(summary.aggregated_score, 8),
+        summary.codebase_pass_count,
         summary.true_positives,
         -summary.invalid_runs,
     )
@@ -588,8 +590,8 @@ def record_sn60_lane_provenance(
             final_metrics=sn60_final_metrics(duel_summary, decision),
             local_replica_scores=sn60_local_replica_scores(duel_summary),
             pass_counts={
-                "frontier": duel_summary.frontier.pass_count,
-                "candidate": duel_summary.candidate.pass_count,
+                "frontier": duel_summary.frontier.codebase_pass_count,
+                "candidate": duel_summary.candidate.codebase_pass_count,
             },
             true_positives={
                 "frontier": duel_summary.frontier.true_positives,
@@ -672,15 +674,20 @@ def sn60_final_metrics(
     duel_summary: Sn60DuelSummary,
     decision: Sn60PromotionDecision,
 ) -> dict[str, object]:
+    frontier_aggregated = duel_summary.frontier.aggregated_score
+    candidate_aggregated = duel_summary.candidate.aggregated_score
     return {
         "run_id": duel_summary.run_id,
         "promotion_ready": decision.promotion_ready,
         "promotion_reason": decision.reason,
-        "frontier_average_score": duel_summary.frontier.average_score,
-        "candidate_average_score": duel_summary.candidate.average_score,
-        "candidate_score_delta": (
-            duel_summary.candidate.average_score - duel_summary.frontier.average_score
-        ),
+        "frontier_aggregated_score": frontier_aggregated,
+        "candidate_aggregated_score": candidate_aggregated,
+        "candidate_aggregated_score_delta": candidate_aggregated - frontier_aggregated,
+        # `average score` is defined as exactly equal to `aggregated score` per the
+        # SN60 metric naming rule; kept for existing dashboard consumers.
+        "frontier_average_score": frontier_aggregated,
+        "candidate_average_score": candidate_aggregated,
+        "candidate_score_delta": candidate_aggregated - frontier_aggregated,
         "sandbox_commit": duel_summary.sandbox_source.sandbox_commit,
         "benchmark_sha256": duel_summary.sandbox_source.benchmark_sha256,
         "scorer_version": duel_summary.sandbox_source.scorer_version,
