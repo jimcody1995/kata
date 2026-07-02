@@ -138,7 +138,7 @@ uv run kata submission validate \
 After validation, Kata evaluates the candidate against the current king.
 
 ```bash
-KATA_SN60_PROJECT_KEYS=<project-keys> uv run kata submission evaluate \
+uv run kata submission evaluate \
   --path submissions/<subnet-pack>/<mode>/<submission-id> --json
 ```
 
@@ -147,6 +147,8 @@ For the current live design:
 - the candidate is screened first: static checks plus one sandbox execution
 - candidate and king each run repeated replicas per benchmark codebase in the
   pinned Bitsec sandbox
+- if no explicit SN60 project keys are provided, Kata evaluates every
+  `project_id` in the resolved benchmark snapshot
 - a codebase passes only if at least 2 of 3 runs pass
 - the aggregated score is passed codebases divided by total codebases
 

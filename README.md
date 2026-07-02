@@ -51,8 +51,8 @@ uv run kata lane list --active-only
 uv run kata submission init --subnet-pack sn60__bitsec --mode miner --submission-id you-20260702-01
 uv run kata submission validate --path submissions/sn60__bitsec/miner/you-20260702-01
 
-# run a duel (requires Docker, the pinned sandbox, and project keys)
-KATA_SN60_PROJECT_KEYS=project-a uv run kata submission evaluate \
+# run a duel (requires Docker and the pinned sandbox; tasks come from the benchmark)
+uv run kata submission evaluate \
   --path submissions/sn60__bitsec/miner/you-20260702-01 --json
 
 # verify, decide, and promote
@@ -65,7 +65,8 @@ uv run kata king promote --challenge-run <summary> --submission-path <submission
 
 - `KATA_ROOT` — kata root that owns `lanes/` and `kings/` (defaults to this repo).
 - `KATA_SN60_SANDBOX_ROOT` — pinned Bitsec sandbox mirror checkout.
-- `KATA_SN60_PROJECT_KEYS` — comma-separated benchmark project keys for duels.
+- `KATA_SN60_PROJECT_KEYS` — optional comma-separated project-key override; by
+  default Kata evaluates every `project_id` in the resolved SN60 benchmark.
 - `INFERENCE_API_KEY` — miner execution key (injected per submission by the bot).
 - `CHUTES_API_KEY` — validator-owned scoring key, never shared with miner code.
 

@@ -33,6 +33,8 @@ from kata.challenge import (
 from kata.evaluators.sn60_bitsec import (
     DEFAULT_REPLICAS_PER_PROJECT,
     SN60_BITSEC_EVALUATOR_ID,
+    load_sn60_benchmark_project_keys,
+    resolve_sn60_sandbox_source,
 )
 from kata.lane_state import (
     KING_STATE_SCHEMA_VERSION,
@@ -391,11 +393,16 @@ def evaluate_submission(
             "Submission does not target a registered SN60 evaluator lane. "
             "Register the lane in the pack registry before evaluating."
         )
-    project_keys = sn60_project_keys or parse_sn60_project_keys_from_env()
+    project_keys = resolve_sn60_project_keys(
+        configured_keys=sn60_project_keys,
+        sandbox_root=sn60_sandbox_root,
+        benchmark_file=sn60_benchmark_file,
+        sandbox_commit=sn60_sandbox_commit,
+    )
     if not project_keys:
         raise ValueError(
-            "SN60 miner evaluation requires at least one project key. "
-            "Pass --sn60-project-key or set KATA_SN60_PROJECT_KEYS."
+            "SN60 miner evaluation requires at least one project key in the "
+            "resolved benchmark snapshot."
         )
     lane_id, king_artifact_path = resolve_sn60_king_artifact(validation.metadata)
     return run_sn60_challenge(
@@ -415,6 +422,25 @@ def evaluate_submission(
 def parse_sn60_project_keys_from_env() -> list[str]:
     configured = os.environ.get("KATA_SN60_PROJECT_KEYS", "")
     return [part.strip() for part in configured.split(",") if part.strip()]
+
+
+def resolve_sn60_project_keys(
+    *,
+    configured_keys: list[str] | None,
+    sandbox_root: str | None,
+    benchmark_file: str | None,
+    sandbox_commit: str | None,
+) -> list[str]:
+    explicit_keys = configured_keys or parse_sn60_project_keys_from_env()
+    if explicit_keys:
+        return explicit_keys
+    sandbox_source = resolve_sn60_sandbox_source(
+        sandbox_root=sandbox_root,
+        benchmark_file=benchmark_file,
+        sandbox_commit=sandbox_commit,
+        scorer_version="ScaBenchScorerV2",
+    )
+    return load_sn60_benchmark_project_keys(sandbox_source)
 
 
 def is_sn60_miner_metadata(metadata: SubmissionMetadata) -> bool:

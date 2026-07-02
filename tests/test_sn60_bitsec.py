@@ -10,6 +10,7 @@ from kata.evaluators.sn60_bitsec import (
     Sn60ReplicaContext,
     build_bitsec_execution_command,
     extract_evaluation_metrics,
+    load_sn60_benchmark_project_keys,
     project_passes,
     resolve_sn60_sandbox_source,
     run_sn60_bitsec_duel,
@@ -47,6 +48,16 @@ def write_sandbox_source(root: Path) -> Path:
 def test_run_sn60_bitsec_duel_stages_full_bundle_and_persists_outputs(tmp_path: Path) -> None:
     sandbox_root = tmp_path / "sandbox"
     benchmark_path = write_sandbox_source(sandbox_root)
+    benchmark_path.write_text(
+        json.dumps(
+            [
+                {"project_id": "project-alpha", "vulnerabilities": []},
+                {"project_id": "project-beta", "vulnerabilities": []},
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     king_root = tmp_path / "king"
     candidate_root = tmp_path / "candidate"
     write_bundle(
@@ -165,6 +176,52 @@ def test_run_sn60_bitsec_duel_stages_full_bundle_and_persists_outputs(tmp_path: 
         evaluation_path = report_path.with_name("evaluation.json")
         assert report_path.exists()
         assert evaluation_path.exists()
+
+
+def test_load_sn60_benchmark_project_keys_reads_real_snapshot_ids(tmp_path: Path) -> None:
+    sandbox_root = tmp_path / "sandbox"
+    benchmark_path = write_sandbox_source(sandbox_root)
+    payload = json.loads(benchmark_path.read_text(encoding="utf-8"))
+    payload.extend(
+        [
+            {"project_id": "project-beta", "vulnerabilities": []},
+            {"project_id": "project-alpha", "vulnerabilities": []},
+        ]
+    )
+    benchmark_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    source = resolve_sn60_sandbox_source(
+        sandbox_root=str(sandbox_root),
+        benchmark_file=str(benchmark_path),
+        sandbox_commit="commit-1",
+        scorer_version="ScaBenchScorerV2",
+    )
+
+    assert load_sn60_benchmark_project_keys(source) == ["project-alpha", "project-beta"]
+
+
+def test_run_sn60_bitsec_duel_rejects_project_keys_missing_from_benchmark(
+    tmp_path: Path,
+) -> None:
+    sandbox_root = tmp_path / "sandbox"
+    benchmark_path = write_sandbox_source(sandbox_root)
+    king_root = tmp_path / "king"
+    candidate_root = tmp_path / "candidate"
+    write_bundle(king_root, agent_source="def agent_main():\n    return {'vulnerabilities': []}\n")
+    write_bundle(
+        candidate_root,
+        agent_source="def agent_main():\n    return {'vulnerabilities': []}\n",
+    )
+
+    with pytest.raises(ValueError, match="not present in the resolved benchmark"):
+        run_sn60_bitsec_duel(
+            king_artifact_path=str(king_root),
+            candidate_artifact_path=str(candidate_root),
+            project_keys=["project-missing"],
+            output_root=str(tmp_path / "runs"),
+            sandbox_root=str(sandbox_root),
+            benchmark_file=str(benchmark_path),
+            sandbox_commit="commit-1",
+        )
 
 
 def test_build_bitsec_execution_command_mounts_bundle_and_sets_pythonpath(tmp_path: Path) -> None:

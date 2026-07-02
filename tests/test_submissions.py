@@ -517,6 +517,59 @@ def test_evaluate_submission_uses_seeded_lane_king_for_registry_lane(
     assert calls["lane_id"] == "sn60__bitsec"
 
 
+def test_evaluate_submission_uses_benchmark_project_keys_by_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    public_root = tmp_path / "kata-root"
+    write_evaluator_lane(public_root)
+    monkeypatch.setenv("KATA_ROOT", str(public_root))
+    seed_lane_king(public_root, "sn60__bitsec")
+
+    sandbox_root = tmp_path / "sandbox"
+    benchmark_path = sandbox_root / "validator" / "curated-highs-only-2025-08-08.json"
+    benchmark_path.parent.mkdir(parents=True)
+    benchmark_path.write_text(
+        json.dumps(
+            [
+                {"project_id": "project-beta", "vulnerabilities": []},
+                {"project_id": "project-alpha", "vulnerabilities": []},
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="alice-20260702-05",
+        output_root=str(repo_root / "submissions"),
+    )
+    (submission_root / "agent.py").write_text(VALID_MINER_AGENT, encoding="utf-8")
+
+    sentinel = object()
+    calls: dict[str, object] = {}
+
+    def fake_run_sn60_challenge(**kwargs):
+        calls.update(kwargs)
+        return sentinel
+
+    monkeypatch.delenv("KATA_SN60_PROJECT_KEYS", raising=False)
+    monkeypatch.setattr("kata.submissions.run_sn60_challenge", fake_run_sn60_challenge)
+
+    summary = evaluate_submission(
+        str(submission_root),
+        sn60_sandbox_root=str(sandbox_root),
+        sn60_benchmark_file=str(benchmark_path),
+        sn60_sandbox_commit="commit-1",
+    )
+
+    assert summary is sentinel
+    assert calls["project_keys"] == ["project-alpha", "project-beta"]
+
+
 def test_evaluate_submission_requires_seeded_king_for_registry_lane(
     tmp_path: Path,
     monkeypatch,

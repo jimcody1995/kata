@@ -193,6 +193,7 @@ def run_sn60_bitsec_duel(
         sandbox_commit=sandbox_commit,
         scorer_version=scorer_version,
     )
+    validate_sn60_project_keys(project_keys, sandbox_source=source)
     king_root = Path(king_artifact_path).expanduser().resolve()
     candidate_root = Path(candidate_artifact_path).expanduser().resolve()
     output_base = (
@@ -348,6 +349,36 @@ def resolve_sn60_sandbox_source(
         sandbox_commit=resolved_commit,
         scorer_version=scorer_version,
     )
+
+
+def load_sn60_benchmark_project_keys(sandbox_source: Sn60SandboxSource) -> list[str]:
+    payload = json.loads(Path(sandbox_source.benchmark_file).read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("SN60 benchmark snapshot must be a JSON list.")
+    project_keys: list[str] = []
+    for index, entry in enumerate(payload):
+        if not isinstance(entry, dict):
+            raise ValueError(f"SN60 benchmark entry {index} must be a JSON object.")
+        project_id = entry.get("project_id")
+        if isinstance(project_id, str) and project_id.strip():
+            project_keys.append(project_id.strip())
+    if not project_keys:
+        raise ValueError("SN60 benchmark snapshot does not contain any project_id entries.")
+    return sorted(dict.fromkeys(project_keys))
+
+
+def validate_sn60_project_keys(
+    project_keys: list[str],
+    *,
+    sandbox_source: Sn60SandboxSource,
+) -> None:
+    benchmark_project_keys = set(load_sn60_benchmark_project_keys(sandbox_source))
+    missing = [key for key in project_keys if key not in benchmark_project_keys]
+    if missing:
+        raise ValueError(
+            "SN60 project keys are not present in the resolved benchmark snapshot: "
+            + ", ".join(missing)
+        )
 
 
 def default_sandbox_root() -> Path:

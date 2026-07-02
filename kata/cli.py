@@ -281,7 +281,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--sn60-project-key",
         action="append",
         default=None,
-        help="SN60 Bitsec project key to evaluate. Repeat for multiple projects.",
+        help=(
+            "Optional SN60 Bitsec project key to evaluate. Repeat for multiple "
+            "projects. Defaults to every project_id in the resolved benchmark snapshot."
+        ),
     )
     submission_evaluate.add_argument(
         "--sn60-replicas-per-project",
