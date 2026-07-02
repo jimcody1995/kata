@@ -134,3 +134,55 @@ def test_run_sn60_screening_rejects_bad_execution_report(tmp_path: Path) -> None
     assert result.stage == SN60_SCREENING_STAGE_EXECUTION
     assert any("top-level `vulnerabilities` list" in reason for reason in result.reasons)
     assert Path(result.report_path or "").exists()
+
+
+def test_validate_sn60_static_screening_rejects_expanded_leak_tokens(
+    tmp_path: Path,
+) -> None:
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "GROUND = 'ground_truth'\n"
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        "    return {'vulnerabilities': []}\n",
+    )
+
+    reasons = validate_sn60_static_screening(bundle_root)
+
+    assert any(
+        "benchmark-answer leakage token" in reason and "ground_truth" in reason
+        for reason in reasons
+    )
+
+
+def test_validate_sn60_static_screening_rejects_validator_secret_reference(
+    tmp_path: Path,
+) -> None:
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "import os\n"
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        "    os.environ.get('CHUTES_API_KEY')\n"
+        "    return {'vulnerabilities': []}\n",
+    )
+
+    reasons = validate_sn60_static_screening(bundle_root)
+
+    assert any("validator secret reference" in reason for reason in reasons)
+
+
+def test_validate_sn60_static_screening_rejects_hardcoded_chutes_key(
+    tmp_path: Path,
+) -> None:
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "KEY = 'cpk_abcdefghij1234567890'\n"
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        "    return {'vulnerabilities': []}\n",
+    )
+
+    reasons = validate_sn60_static_screening(bundle_root)
+
+    assert any("hardcoded secret token" in reason for reason in reasons)

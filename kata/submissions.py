@@ -91,6 +91,7 @@ FORBIDDEN_ENV_REFERENCE_TOKENS = (
     "KATA_VALIDATOR_API_KEY",
     "KATA_VALIDATOR_API_BASE",
     "KATA_VALIDATOR_MODEL",
+    "CHUTES_API_KEY",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "GOOGLE_API_KEY",
@@ -124,7 +125,9 @@ FORBIDDEN_SAMPLING_NAMES = {
     "top_logprobs",
 }
 REQUIRED_SOLVE_ARGS = ("repo_path", "issue", "model", "api_base", "api_key")
-SECRET_PATTERN = re.compile(r"(sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{10,}|hf_[A-Za-z0-9]{10,})")
+SECRET_PATTERN = re.compile(
+    r"(sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{10,}|hf_[A-Za-z0-9]{10,}|cpk_[A-Za-z0-9]{10,})"
+)
 
 
 @dataclass(frozen=True)

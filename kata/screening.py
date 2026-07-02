@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import secrets
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -30,7 +31,24 @@ BENCHMARK_LEAK_TOKENS = (
     "known solution",
     "expected_findings",
     "expected findings",
+    "expected_vulnerabilities",
+    "expected vulnerabilities",
+    "ground_truth",
+    "ground truth",
+    "answer_key",
+    "answer key",
+    "scabench",
     "hardsteer",
+)
+
+# Screener security checks: submitted agents must never reference validator
+# scoring secrets or ship hardcoded provider keys.
+VALIDATOR_SECRET_ENV_TOKENS = (
+    "CHUTES_API_KEY",
+    "KATA_VALIDATOR_API_KEY",
+)
+HARDCODED_SECRET_PATTERN = re.compile(
+    r"(sk-[A-Za-z0-9]{10,}|ghp_[A-Za-z0-9]{10,}|hf_[A-Za-z0-9]{10,}|cpk_[A-Za-z0-9]{10,})"
 )
 
 
@@ -151,6 +169,20 @@ def validate_sn60_static_screening(candidate_root: str | Path) -> list[str]:
             "SN60 miner submissions do not support helper files in V1: "
             + ", ".join(helper_paths)
         )
+
+    for relative_path, content in sorted(bundle_files.items()):
+        if not relative_path.endswith(".py"):
+            continue
+        for token in VALIDATOR_SECRET_ENV_TOKENS:
+            if token in content:
+                reasons.append(
+                    "SN60 screening rejected a validator secret reference: "
+                    f"{relative_path} references `{token}`."
+                )
+        if HARDCODED_SECRET_PATTERN.search(content):
+            reasons.append(
+                f"SN60 screening rejected a hardcoded secret token in {relative_path}."
+            )
 
     agent_source = bundle_files.get(AGENT_ENTRY_FILENAME)
     if agent_source is None:
