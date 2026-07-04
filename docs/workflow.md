@@ -96,6 +96,8 @@ Default production behavior:
 - all projects from the resolved benchmark snapshot are eligible
 - candidate and king run the same selected project set
 - each selected project runs repeated replicas, default `3`
+- execution is per project: candidate replicas first, then king replicas for
+  that same project, then the next project
 - a project passes only if at least `2 of 3` replicas pass
 
 MVP cost-saving behavior:
@@ -135,6 +137,10 @@ The rank comparator is:
 
 Same score and same tie-breakers are not enough; the candidate must strictly
 beat the current king.
+
+Aggregated score is calculated after the executed replica results are summarized:
+`passed_codebases / evaluated_codebases`. A codebase counts as passed only when
+at least two thirds of its replicas pass.
 
 ## PR Decision Actions
 

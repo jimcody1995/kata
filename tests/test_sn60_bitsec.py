@@ -940,3 +940,55 @@ def test_duel_ignores_legacy_early_stop_env_and_runs_full_grid(tmp_path, monkeyp
     assert {project for _, project in executed} == set(keys)  # all projects ran
     assert summary.project_keys == keys  # original order preserved
     assert not (Path(summary.output_root) / "early_stop.json").exists()
+
+
+def test_duel_runs_candidate_then_king_per_project(tmp_path: Path) -> None:
+    keys = ["project-alpha", "project-beta"]
+    executed: list[tuple[str, str, int]] = []
+
+    def execute(context: Sn60ReplicaContext) -> dict[str, object]:
+        executed.append((context.variant_name, context.project_key, context.replica_index))
+        return {"success": True, "report": {"project": context.project_key, "vulnerabilities": []}}
+
+    def evaluate(_context: Sn60ReplicaContext, _report: dict[str, object]) -> dict[str, object]:
+        return {
+            "status": "success",
+            "result": {
+                "result": "PASS",
+                "detection_rate": 1.0,
+                "true_positives": 1,
+                "total_expected": 1,
+                "total_found": 1,
+            },
+        }
+
+    sandbox_root = tmp_path / "sandbox"
+    benchmark_path = _make_multi_project_benchmark(sandbox_root, keys)
+    king_root = tmp_path / "king"
+    candidate_root = tmp_path / "candidate"
+    write_bundle(king_root, agent_source="def agent_main():\n    return {}\n")
+    write_bundle(candidate_root, agent_source="def agent_main():\n    return {}\n")
+
+    run_sn60_bitsec_duel(
+        king_artifact_path=str(king_root),
+        candidate_artifact_path=str(candidate_root),
+        project_keys=keys,
+        output_root=str(tmp_path / "runs"),
+        replicas_per_project=2,
+        sandbox_root=str(sandbox_root),
+        benchmark_file=str(benchmark_path),
+        sandbox_commit="commit-project-order",
+        execution_hook=execute,
+        evaluation_hook=evaluate,
+    )
+
+    assert executed == [
+        ("candidate", "project-alpha", 1),
+        ("candidate", "project-alpha", 2),
+        ("king", "project-alpha", 1),
+        ("king", "project-alpha", 2),
+        ("candidate", "project-beta", 1),
+        ("candidate", "project-beta", 2),
+        ("king", "project-beta", 1),
+        ("king", "project-beta", 2),
+    ]

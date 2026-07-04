@@ -256,14 +256,23 @@ def run_sn60_bitsec_duel(
             stop_on_invalid=stop_on_invalid,
         )
 
-    candidate_results = _run_phase(
-        list(project_keys),
-        "candidate",
-        candidate_root,
-        stop_on_invalid=True,
-    )
-    candidate_invalid = any(result.evaluation_status != "success" for result in candidate_results)
-    king_results = [] if candidate_invalid else _run_phase(list(project_keys), "king", king_root)
+    candidate_results: list[Sn60ReplicaResult] = []
+    king_results: list[Sn60ReplicaResult] = []
+    for project_key in project_keys:
+        project_candidate_results = _run_phase(
+            [project_key],
+            "candidate",
+            candidate_root,
+            stop_on_invalid=True,
+        )
+        candidate_results.extend(project_candidate_results)
+        candidate_invalid = any(
+            result.evaluation_status != "success"
+            for result in project_candidate_results
+        )
+        if candidate_invalid:
+            break
+        king_results.extend(_run_phase([project_key], "king", king_root))
     ordered_executed_keys = list(project_keys)
 
     king_summary = summarize_variant(
