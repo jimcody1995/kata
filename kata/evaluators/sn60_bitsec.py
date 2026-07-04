@@ -678,7 +678,7 @@ def extract_evaluation_metrics(evaluation_payload: dict[str, object]) -> Sn60Eva
     if not isinstance(result_payload, dict):
         result_payload = {}
     is_success = status_value == "success"
-    detection_rate = float(result_payload.get("detection_rate", 0.0) or 0.0)
+    detection_rate = safe_float(result_payload.get("detection_rate"), 0.0)
     # Every metric is gated on evaluation success: a non-success replica must
     # not contribute a PASS or inflate true-positive counts. The king variant
     # is never gated on invalid_runs, so ungated metrics would silently raise
@@ -693,17 +693,31 @@ def extract_evaluation_metrics(evaluation_payload: dict[str, object]) -> Sn60Eva
             else None
         ),
         "true_positives": (
-            int(result_payload.get("true_positives", 0) or 0) if is_success else 0
+            safe_int(result_payload.get("true_positives"), 0) if is_success else 0
         ),
         "total_expected": (
-            int(result_payload.get("total_expected", 0) or 0) if is_success else 0
+            safe_int(result_payload.get("total_expected"), 0) if is_success else 0
         ),
         "total_found": (
-            int(result_payload.get("total_found", 0) or 0) if is_success else 0
+            safe_int(result_payload.get("total_found"), 0) if is_success else 0
         ),
-        "precision": float(result_payload.get("precision", 0.0) or 0.0) if is_success else 0.0,
-        "f1_score": float(result_payload.get("f1_score", 0.0) or 0.0) if is_success else 0.0,
+        "precision": safe_float(result_payload.get("precision"), 0.0) if is_success else 0.0,
+        "f1_score": safe_float(result_payload.get("f1_score"), 0.0) if is_success else 0.0,
     }
+
+
+def safe_float(value: object, default: float) -> float:
+    try:
+        return float(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_int(value: object, default: int) -> int:
+    try:
+        return int(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
 
 
 def resolve_sn60_inference_api() -> str:
@@ -914,19 +928,20 @@ def build_default_evaluation_hook(source: Sn60SandboxSource) -> Sn60EvaluationHo
             }
         if completed.returncode == 0:
             try:
-                return json.loads(completed.stdout.strip())
+                payload = json.loads(completed.stdout.strip())
             except json.JSONDecodeError:
-                pass
-        evaluation_path = Path(context.evaluation_path)
-        if evaluation_path.exists():
-            # Same reports dir is agent-writable, so guard this parse too.
-            return _read_untrusted_report_json(
-                evaluation_path,
-                failure={
+                return {
                     "status": "error",
-                    "error": "SN60 evaluation output is not a valid JSON object.",
-                },
-            )
+                    "error": "SN60 evaluation stdout is not valid JSON.",
+                    "result": {},
+                }
+            if isinstance(payload, dict):
+                return payload
+            return {
+                "status": "error",
+                "error": "SN60 evaluation stdout is not a JSON object.",
+                "result": {},
+            }
         return {
             "status": "error",
             "error": (

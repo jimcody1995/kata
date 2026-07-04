@@ -10,6 +10,7 @@ from kata.evaluators.sn60_bitsec import (
     Sn60ReplicaContext,
     Sn60ReplicaResult,
     build_bitsec_execution_command,
+    build_default_evaluation_hook,
     build_default_execution_hook,
     ensure_internal_agent_network,
     extract_evaluation_metrics,
@@ -479,6 +480,51 @@ def test_default_evaluation_hook_points_validator_dir_at_recorded_benchmark(
     ) == benchmark_path
 
 
+def test_default_evaluation_hook_ignores_agent_writable_evaluation_json(
+    tmp_path: Path, monkeypatch
+) -> None:
+    sandbox_root = tmp_path / "sandbox"
+    benchmark_path = write_sandbox_source(sandbox_root)
+    source = resolve_sn60_sandbox_source(
+        sandbox_root=str(sandbox_root),
+        benchmark_file=str(benchmark_path),
+        sandbox_commit="commit-1",
+        scorer_version="ScaBenchScorerV2",
+    )
+    context = _make_context(tmp_path, source)
+    evaluation_path = Path(context.evaluation_path)
+    evaluation_path.parent.mkdir(parents=True, exist_ok=True)
+    evaluation_path.write_text(
+        json.dumps(
+            {
+                "status": "success",
+                "result": {
+                    "detection_rate": 1.0,
+                    "true_positives": 999,
+                    "total_expected": 1,
+                    "result": "PASS",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("CHUTES_API_KEY", "scoring-key")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda cmd, *a, **k: subprocess.CompletedProcess(
+            cmd, 1, stdout="not json", stderr="scorer failed"
+        ),
+    )
+
+    payload = build_default_evaluation_hook(source)(context, {"success": True})
+
+    assert payload["status"] == "error"
+    assert "scorer failed" in payload["error"]
+    assert payload["result"] == {}
+
+
 def _run_default_execution_hook_with_report(tmp_path, monkeypatch, source, report_text):
     """Drive the default execution hook with the docker/subprocess edges mocked,
     after the (untrusted) agent wrote `report_text` to report.json."""
@@ -656,6 +702,31 @@ def test_extract_evaluation_metrics_accepts_enum_repr_status() -> None:
     failed = extract_evaluation_metrics({"status": "Status.ERROR", "result": {}})
     assert failed["evaluation_status"] == "error"
     assert failed["score"] == 0.0
+
+
+def test_extract_evaluation_metrics_tolerates_malformed_numbers() -> None:
+    metrics = extract_evaluation_metrics(
+        {
+            "status": "success",
+            "result": {
+                "detection_rate": "not-a-number",
+                "true_positives": "NaN",
+                "total_expected": None,
+                "total_found": {},
+                "precision": "x",
+                "f1_score": [],
+                "result": "PASS",
+            },
+        }
+    )
+
+    assert metrics["evaluation_status"] == "success"
+    assert metrics["score"] == 0.0
+    assert metrics["true_positives"] == 0
+    assert metrics["total_expected"] == 0
+    assert metrics["total_found"] == 0
+    assert metrics["precision"] == 0.0
+    assert metrics["f1_score"] == 0.0
 
 
 def test_execution_subprocess_env_strips_validator_scoring_secrets(

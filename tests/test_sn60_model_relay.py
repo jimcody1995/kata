@@ -37,14 +37,21 @@ def test_pin_model_adds_model_when_absent() -> None:
     assert out["model"] == "qwen/pinned"
 
 
-def test_pin_model_preserves_other_request_fields() -> None:
+def test_pin_model_preserves_tools_and_removes_sampling_fields() -> None:
     body = json.dumps(
-        {"model": "x", "messages": [], "tools": [{"t": 1}], "temperature": 0.9}
+        {
+            "model": "x",
+            "messages": [],
+            "tools": [{"t": 1}],
+            "temperature": 0.9,
+            "seed": 123,
+        }
     ).encode()
     out = json.loads(pin_model_in_body(body, "qwen/pinned"))
     assert out["model"] == "qwen/pinned"
     assert out["tools"] == [{"t": 1}]
-    assert out["temperature"] == 0.9
+    assert "temperature" not in out
+    assert "seed" not in out
 
 
 def test_pin_model_leaves_non_json_untouched() -> None:
@@ -107,7 +114,7 @@ class _RecordingUpstream(BaseHTTPRequestHandler):
                 "body": body,
             }
         )
-        if self.path.split("?", 1)[0] == "/boom":
+        if self.headers.get("X-Upstream-Boom") == "yes":
             self._reply(502, {"detail": "upstream boom"})
             return
         self._reply(
@@ -177,7 +184,14 @@ def _post(url: str, body: bytes, headers: dict[str, str] | None = None):
 
 def test_inference_model_is_pinned_before_reaching_upstream(relay_and_upstream) -> None:
     base, upstream = relay_and_upstream
-    body = json.dumps({"model": "anthropic/claude-opus", "messages": []}).encode()
+    body = json.dumps(
+        {
+            "model": "anthropic/claude-opus",
+            "messages": [],
+            "temperature": 0.9,
+            "seed": 123,
+        }
+    ).encode()
 
     status, _, resp_headers = _post(
         base + "/inference",
@@ -190,7 +204,10 @@ def test_inference_model_is_pinned_before_reaching_upstream(relay_and_upstream) 
     assert len(upstream.records) == 1
     record = upstream.records[0]
     assert record["path"] == "/inference"
-    assert json.loads(record["body"])["model"] == "qwen/pinned-test"
+    outbound = json.loads(record["body"])
+    assert outbound["model"] == "qwen/pinned-test"
+    assert "temperature" not in outbound
+    assert "seed" not in outbound
     # The agent's inference key rides through untouched to the real proxy.
     assert record["headers"].get("x-inference-api-key") == "sk-or-abc"
 
@@ -206,16 +223,19 @@ def test_inference_query_string_is_still_pinned(relay_and_upstream) -> None:
     assert json.loads(record["body"])["model"] == "qwen/pinned-test"
 
 
-def test_non_inference_body_passes_through_untouched(relay_and_upstream) -> None:
+def test_non_inference_upstream_paths_are_blocked(relay_and_upstream) -> None:
     base, upstream = relay_and_upstream
     body = json.dumps({"model": "anthropic/claude-opus"}).encode()
 
-    _post(base + "/metrics/job-runs/x/summary/reset", body, {"Content-Type": "application/json"})
+    with pytest.raises(HTTPError) as excinfo:
+        _post(
+            base + "/metrics/job-runs/x/summary/reset",
+            body,
+            {"Content-Type": "application/json"},
+        )
 
-    record = upstream.records[0]
-    assert record["path"].startswith("/metrics/")
-    # Only /inference is rewritten; other endpoints keep their body verbatim.
-    assert json.loads(record["body"])["model"] == "anthropic/claude-opus"
+    assert excinfo.value.code == 404
+    assert upstream.records == []
 
 
 def test_health_is_answered_locally_without_touching_upstream(relay_and_upstream) -> None:
@@ -233,7 +253,11 @@ def test_upstream_http_error_is_passed_through(relay_and_upstream) -> None:
     body = json.dumps({"messages": []}).encode()
 
     with pytest.raises(HTTPError) as excinfo:
-        _post(base + "/boom", body, {"Content-Type": "application/json"})
+        _post(
+            base + "/inference",
+            body,
+            {"Content-Type": "application/json", "X-Upstream-Boom": "yes"},
+        )
 
     assert excinfo.value.code == 502
 
@@ -344,6 +368,12 @@ def test_costs_reset_zeroes_the_running_total(relay_and_upstream) -> None:
 
 def test_scoring_style_traffic_is_not_metered(relay_and_upstream) -> None:
     base, _ = relay_and_upstream
-    # Non-/inference calls (e.g. metrics) must not count toward inference cost.
-    _post(base + "/metrics/job-runs/x/summary/reset", b"{}", {"Content-Type": "application/json"})
+    # Non-/inference calls are blocked and must not count toward inference cost.
+    with pytest.raises(HTTPError) as excinfo:
+        _post(
+            base + "/metrics/job-runs/x/summary/reset",
+            b"{}",
+            {"Content-Type": "application/json"},
+        )
+    assert excinfo.value.code == 404
     assert _get_json(base + "/costs")["requests"] == 0

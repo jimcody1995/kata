@@ -257,6 +257,21 @@ def test_validate_submission_rejects_sampling_override(tmp_path, monkeypatch) ->
     assert any("sampling parameters" in reason for reason in reasons)
 
 
+def test_validate_submission_rejects_dict_unpack_sampling_override(
+    tmp_path, monkeypatch
+) -> None:
+    reasons = validation_reasons(
+        tmp_path,
+        monkeypatch,
+        agent_source=(
+            "def agent_main(project_dir=None, inference_api=None):\n"
+            "    call(**{'temperature': 0.2})\n"
+            "    return {\"vulnerabilities\": []}\n"
+        ),
+    )
+    assert any("temperature" in reason for reason in reasons)
+
+
 def test_validate_submission_rejects_provider_endpoint(tmp_path, monkeypatch) -> None:
     reasons = validation_reasons(
         tmp_path,
@@ -273,6 +288,36 @@ def test_validate_submission_rejects_provider_endpoint(tmp_path, monkeypatch) ->
 def test_validate_submission_reports_malformed_metadata(tmp_path, monkeypatch) -> None:
     _, repo_root, submission_root = make_miner_submission(tmp_path, monkeypatch)
     (submission_root / "submission.json").write_text("{not json", encoding="utf-8")
+
+    result = validate_submission(str(submission_root), repo_root=str(repo_root))
+
+    assert not result.is_valid
+    assert result.reasons
+
+
+def test_validate_submission_reports_invalid_metadata_schema_type(
+    tmp_path, monkeypatch
+) -> None:
+    _, repo_root, submission_root = make_miner_submission(tmp_path, monkeypatch)
+    metadata_path = submission_root / "submission.json"
+    payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    payload["schema_version"] = None
+    metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = validate_submission(str(submission_root), repo_root=str(repo_root))
+
+    assert not result.is_valid
+    assert any("invalid field" in reason for reason in result.reasons)
+
+
+def test_validate_submission_reports_invalid_manifest_schema_type(
+    tmp_path, monkeypatch
+) -> None:
+    _, repo_root, submission_root = make_miner_submission(tmp_path, monkeypatch)
+    manifest_path = submission_root / AGENT_MANIFEST_FILENAME
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["schema_version"] = None
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
 
     result = validate_submission(str(submission_root), repo_root=str(repo_root))
 

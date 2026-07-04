@@ -8,13 +8,13 @@ proxy. That protects the validator two ways at once:
 
 * **Cost** — a miner cannot spend the validator's inference budget on a costlier
   model; the model is overwritten no matter what the agent's code asked for.
-* **Fairness** — king and candidate are guaranteed to duel on the same model.
+* **Fairness** — king and candidate are guaranteed to duel on the same model
+  and cannot override sampling parameters through runtime request bodies.
 
 Enforcement happens on the actual API call, not by scanning source, so runtime or
 obfuscated model strings cannot bypass it: the internal network gives the agent no
-other route to a provider. Every non-inference request (metrics, health) is passed
-through untouched — the relay only ever rewrites the ``model`` field of a
-``POST /inference`` body.
+other route to a provider. Only ``POST /inference`` is forwarded upstream; relay
+health/cost endpoints are answered locally.
 
 The module has no third-party dependencies (kata ships none) and is meant to run as
 a small sidecar container on the agent network:
@@ -53,6 +53,20 @@ HEALTH_PATH = "/healthz"
 # Relay-local cost accounting: read the running total, or zero it before a PR.
 COST_PATH = "/costs"
 COST_RESET_PATH = "/costs/reset"
+FORBIDDEN_SAMPLING_FIELDS = {
+    "temperature",
+    "top_p",
+    "top_k",
+    "min_p",
+    "top_a",
+    "frequency_penalty",
+    "presence_penalty",
+    "repetition_penalty",
+    "seed",
+    "logit_bias",
+    "logprobs",
+    "top_logprobs",
+}
 
 # Hop-by-hop headers must never be forwarded (RFC 7230 section 6.1); Host and
 # Content-Length are recomputed by the outbound request instead of copied.
@@ -225,8 +239,9 @@ def pin_model_in_body(body: bytes, model: str) -> bytes:
     """Force the OpenAI-compatible request body onto ``model``.
 
     A body we cannot read as a JSON object is returned untouched: the upstream
-    proxy is the authority on request validity, so the relay's only job is to
-    overwrite the model field when one could exist, never to reject traffic.
+    proxy is the authority on request validity. For JSON objects, remove
+    miner-controlled sampling knobs so fairness is enforced at the real network
+    boundary, not only by static source checks.
     """
     try:
         payload = json.loads(body)
@@ -235,6 +250,8 @@ def pin_model_in_body(body: bytes, model: str) -> bytes:
     if not isinstance(payload, dict):
         return body
     payload["model"] = model
+    for field in FORBIDDEN_SAMPLING_FIELDS:
+        payload.pop(field, None)
     return json.dumps(payload).encode("utf-8")
 
 
@@ -264,8 +281,16 @@ class ModelPinningRelayHandler(BaseHTTPRequestHandler):
     def _forward(self, method: str) -> None:
         body = self._read_body()
         is_inference = method == "POST" and self._path_without_query() == INFERENCE_PATH
-        if is_inference:
-            body = pin_model_in_body(body, resolve_pinned_model())
+        if not is_inference:
+            self._send_json(
+                404,
+                {
+                    "status": "error",
+                    "reason": "Only POST /inference and relay-local endpoints are allowed.",
+                },
+            )
+            return
+        body = pin_model_in_body(body, resolve_pinned_model())
 
         headers = {
             key: value

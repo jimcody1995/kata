@@ -49,7 +49,7 @@ def validate_agent_manifest(path: Path) -> list[str]:
     reasons: list[str] = []
     try:
         manifest = load_agent_manifest(path)
-    except (ValueError, json.JSONDecodeError, KeyError) as exc:
+    except (ValueError, TypeError, json.JSONDecodeError, KeyError) as exc:
         return [str(exc)]
     if manifest.schema_version != AGENT_MANIFEST_SCHEMA_VERSION:
         reasons.append(

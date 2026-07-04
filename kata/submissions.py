@@ -1254,6 +1254,8 @@ def load_submission_metadata(path: Path) -> SubmissionMetadata:
         raise ValueError(
             f"Submission metadata is missing required field: {exc.args[0]}"
         ) from exc
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Submission metadata has an invalid field: {exc}") from exc
 
 
 def read_submission_subnet_pack(payload: dict[str, object]) -> str:
@@ -1489,6 +1491,18 @@ def validate_bundle_sampling_policy(parsed_trees: dict[str, ast.AST]) -> list[st
                         "Submission bundle must not control model sampling parameters "
                         f"directly: {relative_path} uses `{keyword.arg}`."
                     )
+                if keyword.arg is None and isinstance(keyword.value, ast.Dict):
+                    for key_node in keyword.value.keys:
+                        if (
+                            isinstance(key_node, ast.Constant)
+                            and isinstance(key_node.value, str)
+                            and key_node.value in FORBIDDEN_SAMPLING_NAMES
+                        ):
+                            reasons.append(
+                                "Submission bundle must not control model sampling "
+                                f"parameters directly: {relative_path} uses "
+                                f"`{key_node.value}`."
+                            )
     return reasons
 
 
