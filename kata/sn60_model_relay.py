@@ -45,15 +45,16 @@ DEFAULT_TIMEOUT_SECONDS = 900
 DEFAULT_PRICE_INPUT_PER_M = 0.14
 DEFAULT_PRICE_OUTPUT_PER_M = 1.00
 
-# qwen3.6 is a reasoning model: with thinking left on it spends the whole
-# completion budget on reasoning tokens and returns an empty ``content``, so the
-# agent parses zero findings and every candidate ties the inert king. Force
-# reasoning off at the relay so every miner gets a usable, cheap completion.
-# ``reasoning:{"enabled": false}`` is the only form the upstream honours for this
-# model (``{"exclude": true}`` 502s; ``chat_template_kwargs.enable_thinking`` is
-# ignored). Override with KATA_RELAY_DISABLE_REASONING=false when pinning a
-# non-reasoning model.
-DEFAULT_DISABLE_REASONING = True
+# qwen3.6 is a reasoning model: on a real (large) codebase it emits thousands of
+# reasoning tokens *before* the answer, so a small ``max_tokens`` truncates the
+# completion mid-reasoning (finish_reason=length). The upstream proxy then rejects
+# that as "response unusable" (HTTP 502), which the agent sees as an inference
+# failure -> the candidate evaluation is marked invalid and every PR loses. But
+# turning reasoning *off* makes detection too shallow (0 findings on real audits).
+# The fix is to give the model enough room to both think and answer: the relay
+# forces ``max_tokens`` up to this ceiling. It is a cap, not a target -- the model
+# stops at finish_reason=stop long before it, so cost tracks actual usage.
+DEFAULT_MAX_OUTPUT_TOKENS = 32000
 
 # Only this path carries a model to overwrite; everything else is forwarded as-is.
 INFERENCE_PATH = "/inference"
@@ -121,12 +122,18 @@ def resolve_pinned_model() -> str:
     return DEFAULT_PINNED_MODEL
 
 
-def resolve_disable_reasoning() -> bool:
-    """Whether to force reasoning/thinking off on every forwarded request."""
-    value = os.environ.get("KATA_RELAY_DISABLE_REASONING")
+def resolve_max_output_tokens() -> int:
+    """Ceiling the relay forces ``max_tokens`` up to so the reasoning model has
+    room to think *and* answer without the proxy rejecting a length-truncated
+    response. 0 disables the override (leave the caller's max_tokens as-is)."""
+    value = os.environ.get("KATA_RELAY_MAX_OUTPUT_TOKENS")
     if value is None or not value.strip():
-        return DEFAULT_DISABLE_REASONING
-    return value.strip().lower() not in {"0", "false", "no", "off"}
+        return DEFAULT_MAX_OUTPUT_TOKENS
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        return DEFAULT_MAX_OUTPUT_TOKENS
+    return parsed if parsed >= 0 else DEFAULT_MAX_OUTPUT_TOKENS
 
 
 def resolve_timeout() -> float:
@@ -253,15 +260,16 @@ class CostMeter:
 COST_METER = CostMeter()
 
 
-def pin_model_in_body(body: bytes, model: str, disable_reasoning: bool = True) -> bytes:
+def pin_model_in_body(body: bytes, model: str, max_output_tokens: int = 0) -> bytes:
     """Force the OpenAI-compatible request body onto ``model``.
 
     A body we cannot read as a JSON object is returned untouched: the upstream
     proxy is the authority on request validity. For JSON objects, remove
     miner-controlled sampling knobs so fairness is enforced at the real network
-    boundary, not only by static source checks, and (when ``disable_reasoning``)
-    force reasoning off so the pinned reasoning model returns usable ``content``
-    instead of spending the whole budget on reasoning tokens.
+    boundary, not only by static source checks, and raise ``max_tokens`` up to
+    ``max_output_tokens`` (when > 0) so the pinned reasoning model has room to
+    both reason and emit its answer -- a small cap truncates it mid-reasoning and
+    the proxy rejects the unusable, length-finished response.
     """
     try:
         payload = json.loads(body)
@@ -272,8 +280,10 @@ def pin_model_in_body(body: bytes, model: str, disable_reasoning: bool = True) -
     payload["model"] = model
     for field in FORBIDDEN_SAMPLING_FIELDS:
         payload.pop(field, None)
-    if disable_reasoning:
-        payload["reasoning"] = {"enabled": False}
+    if max_output_tokens > 0:
+        requested = payload.get("max_tokens")
+        if not isinstance(requested, int) or requested < max_output_tokens:
+            payload["max_tokens"] = max_output_tokens
     return json.dumps(payload).encode("utf-8")
 
 
@@ -312,7 +322,7 @@ class ModelPinningRelayHandler(BaseHTTPRequestHandler):
                 },
             )
             return
-        body = pin_model_in_body(body, resolve_pinned_model(), resolve_disable_reasoning())
+        body = pin_model_in_body(body, resolve_pinned_model(), resolve_max_output_tokens())
 
         headers = {
             key: value
