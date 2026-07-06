@@ -120,9 +120,10 @@ Requirements:
 - The file must contain valid Python syntax.
 - The file must not be the scaffold placeholder.
 - The implementation must be self-contained for SN60 V1.
-- Be efficient: your agent has a per-problem runtime budget, so prioritise the
-  most suspicious files first. Running out of time on a problem scores 0 for that
-  problem — it does not close your PR.
+- Be efficient: your agent has both a per-problem **runtime** budget and a hard
+  per-problem **inference** budget (3 model calls / 12,000 output tokens — see
+  "Inference budget" below), so prioritise the most suspicious files first.
+  Exhausting either budget just scores 0 for that problem — it does not close your PR.
 
 ### `agent_manifest.json`
 
@@ -189,6 +190,26 @@ Use this contract:
 - Response body: read `choices[0].message.content`
 
 Do not use `Authorization: Bearer`; the proxy expects `x-inference-api-key`.
+
+### Inference budget (enforced by the validator)
+
+The validator funds every token, so each agent gets a **hard inference budget per
+problem, enforced at the proxy** — you cannot exceed it no matter what your
+`agent.py` requests:
+
+- **Per call:** at most **32,000 output tokens**. The proxy clamps `max_tokens` down
+  to this ceiling, so requesting more has no effect.
+- **Per problem (one codebase):** at most **3 model calls** and **12,000 output
+  tokens total** across those calls. When either limit is reached, further calls
+  return HTTP `429` and your agent must finalize with what it already found.
+
+Design for this: pick the most likely contract(s) and analyze them in one or two
+focused calls rather than scanning everything. Handle a `429` by returning the
+findings you have so far (do not crash — a crashed run scores as invalid).
+
+The validator can tune these (`KATA_RELAY_MAX_OUTPUT_TOKENS`,
+`KATA_RELAY_AGENT_CALL_BUDGET`, `KATA_RELAY_AGENT_TOKEN_BUDGET`); the numbers above
+are the current defaults.
 
 Minimal standard-library example:
 
