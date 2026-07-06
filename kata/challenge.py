@@ -13,6 +13,7 @@ from kata.evaluators.sn60_bitsec import (
     Sn60EvaluationHook,
     Sn60ExecutionHook,
     Sn60ReplicaContext,
+    Sn60ReplicaResult,
     Sn60SandboxSource,
     Sn60VariantSummary,
     bitsec_project_image,
@@ -565,13 +566,34 @@ def run_sn60_round(
         )
 
     def make_progress_callback(candidate_entry: dict[str, object]):
-        def callback(context: Sn60ReplicaContext) -> None:
+        # Accumulate the candidate's running detection/precision/F1 as each problem
+        # finishes, so the dashboard duel detail shows live metric bars while the
+        # duel is still scoring (not just at the end).
+        acc = {"tp": 0, "expected": 0, "found": 0}
+
+        def callback(context: Sn60ReplicaContext, replica_result: Sn60ReplicaResult) -> None:
             if context.variant_name == "king":
                 king = progress["king"]
                 if king["done"] < king["total"]:
                     king["done"] += 1
             elif candidate_entry["done"] < candidate_entry["total"]:
                 candidate_entry["done"] += 1
+                acc["tp"] += replica_result.true_positives
+                acc["expected"] += replica_result.total_expected
+                acc["found"] += replica_result.total_found
+                detection = acc["tp"] / acc["expected"] if acc["expected"] else 0.0
+                precision = acc["tp"] / acc["found"] if acc["found"] else 0.0
+                f1 = (
+                    2 * precision * detection / (precision + detection)
+                    if (precision + detection)
+                    else 0.0
+                )
+                candidate_entry["aggregated_score"] = detection
+                candidate_entry["precision"] = precision
+                candidate_entry["f1_score"] = f1
+                candidate_entry["true_positives"] = acc["tp"]
+                candidate_entry["total_expected"] = acc["expected"]
+                candidate_entry["total_found"] = acc["found"]
             emit_progress()
 
         return callback

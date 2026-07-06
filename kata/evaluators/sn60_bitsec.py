@@ -220,7 +220,7 @@ def run_sn60_bitsec_duel(
     execution_hook: Sn60ExecutionHook | None = None,
     evaluation_hook: Sn60EvaluationHook | None = None,
     king_scoreboard_path: str | None = None,
-    progress_callback: Callable[[Sn60ReplicaContext], None] | None = None,
+    progress_callback: Callable[[Sn60ReplicaContext, Sn60ReplicaResult], None] | None = None,
 ) -> Sn60DuelSummary:
     if not project_keys:
         raise ValueError("SN60 duel requires at least one project key.")
@@ -335,7 +335,7 @@ def score_variant_on_projects(
     execution_hook: Sn60ExecutionHook,
     evaluation_hook: Sn60EvaluationHook,
     eval_max_vulns: int = DEFAULT_EVAL_MAX_VULNS,
-    progress_callback: Callable[[Sn60ReplicaContext], None] | None = None,
+    progress_callback: Callable[[Sn60ReplicaContext, Sn60ReplicaResult], None] | None = None,
 ) -> list[Sn60ReplicaResult]:
     """Run every replica for one variant over the given projects.
 
@@ -373,7 +373,7 @@ def score_variant_on_projects(
             replica_result = build_replica_result(context, report_payload, evaluation_payload)
             replica_results.append(replica_result)
             if progress_callback is not None:
-                progress_callback(context)
+                progress_callback(context, replica_result)
 
     return replica_results
 
