@@ -12,6 +12,7 @@ from kata.evaluators.sn60_bitsec import (
     Sn60DuelSummary,
     Sn60EvaluationHook,
     Sn60ExecutionHook,
+    Sn60ReplicaContext,
     Sn60SandboxSource,
     Sn60VariantSummary,
     bitsec_project_image,
@@ -480,6 +481,7 @@ def run_sn60_round(
     screening_result: dict[str, object] | None = None,
     execution_hook: Sn60ExecutionHook | None = None,
     evaluation_hook: Sn60EvaluationHook | None = None,
+    progress_path: str | None = None,
 ) -> Sn60RoundResult:
     """Score the king once (from cache) against every candidate on the same
     projects, then rank the candidates and pick the strict winner.
@@ -508,7 +510,50 @@ def run_sn60_round(
     sandbox_source: Sn60SandboxSource | None = None
     entries: list[Sn60RoundEntry] = []
     duel_summaries: dict[str, Sn60DuelSummary] = {}
+
+    # Live progress: publish a per-candidate snapshot so the dashboard can show
+    # the round advancing in real time instead of appearing frozen until it ends.
+    per_variant_total = len(project_keys) * replicas_per_project
+    progress = {
+        "schema_version": DEFAULT_SN60_ROUND_SCHEMA_VERSION,
+        "state": "executing",
+        "run_id": run_id,
+        "king": {"done": 0, "total": per_variant_total},
+        "candidates": [
+            {"submission_id": sid, "done": 0, "total": per_variant_total, "state": "queued"}
+            for sid, _ in candidates
+        ],
+    }
+
+    def emit_progress() -> None:
+        if not progress_path:
+            return
+        progress["updated_at"] = datetime.now(UTC).isoformat()
+        path = Path(progress_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(progress, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def make_progress_callback(candidate_entry: dict[str, object]):
+        def callback(context: Sn60ReplicaContext) -> None:
+            if context.variant_name == "king":
+                king = progress["king"]
+                if king["done"] < king["total"]:
+                    king["done"] += 1
+            elif candidate_entry["done"] < candidate_entry["total"]:
+                candidate_entry["done"] += 1
+            emit_progress()
+
+        return callback
+
+    emit_progress()
     for submission_id, candidate_artifact_path in candidates:
+        candidate_entry = next(
+            entry for entry in progress["candidates"] if entry["submission_id"] == submission_id
+        )
+        candidate_entry["state"] = "scoring"
+        emit_progress()
         duel_summary = run_sn60_bitsec_duel(
             king_artifact_path=king_artifact_path,
             candidate_artifact_path=candidate_artifact_path,
@@ -521,7 +566,10 @@ def run_sn60_round(
             execution_hook=execution_hook,
             evaluation_hook=evaluation_hook,
             king_scoreboard_path=king_scoreboard_path,
+            progress_callback=make_progress_callback(candidate_entry),
         )
+        candidate_entry["state"] = "done"
+        emit_progress()
         duel_summaries[submission_id] = duel_summary
         king_summary = duel_summary.king
         sandbox_source = duel_summary.sandbox_source
@@ -577,6 +625,9 @@ def run_sn60_round(
         ),
         winner_challenge_summary_path=winner_challenge_summary_path,
     )
+    progress["state"] = "completed"
+    progress["winner_submission_id"] = result.winner_submission_id
+    emit_progress()
     write_sn60_round_summary(round_root / "round_summary.json", result)
     return result
 

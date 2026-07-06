@@ -220,6 +220,7 @@ def run_sn60_bitsec_duel(
     execution_hook: Sn60ExecutionHook | None = None,
     evaluation_hook: Sn60EvaluationHook | None = None,
     king_scoreboard_path: str | None = None,
+    progress_callback: Callable[[Sn60ReplicaContext], None] | None = None,
 ) -> Sn60DuelSummary:
     if not project_keys:
         raise ValueError("SN60 duel requires at least one project key.")
@@ -277,6 +278,7 @@ def run_sn60_bitsec_duel(
         execution_hook=resolved_execution_hook,
         evaluation_hook=resolved_evaluation_hook,
         eval_max_vulns=eval_max_vulns,
+        progress_callback=progress_callback,
     )
     king_results = score_variant_on_projects(
         run_id=run_id,
@@ -289,6 +291,7 @@ def run_sn60_bitsec_duel(
         execution_hook=king_execution_hook,
         evaluation_hook=king_evaluation_hook,
         eval_max_vulns=eval_max_vulns,
+        progress_callback=progress_callback,
     )
     ordered_executed_keys = list(project_keys)
 
@@ -332,11 +335,13 @@ def score_variant_on_projects(
     execution_hook: Sn60ExecutionHook,
     evaluation_hook: Sn60EvaluationHook,
     eval_max_vulns: int = DEFAULT_EVAL_MAX_VULNS,
+    progress_callback: Callable[[Sn60ReplicaContext], None] | None = None,
 ) -> list[Sn60ReplicaResult]:
     """Run every replica for one variant over the given projects.
 
     Returns the flat replica results (unsummarized) so callers can score king and
-    candidate independently and summarize each set once.
+    candidate independently and summarize each set once. ``progress_callback`` is
+    invoked after each replica finishes so callers can publish live progress.
     """
     variant_root = run_root / variant_name
     replica_results: list[Sn60ReplicaResult] = []
@@ -367,6 +372,8 @@ def score_variant_on_projects(
             write_json(Path(context.evaluation_path), evaluation_payload)
             replica_result = build_replica_result(context, report_payload, evaluation_payload)
             replica_results.append(replica_result)
+            if progress_callback is not None:
+                progress_callback(context)
 
     return replica_results
 

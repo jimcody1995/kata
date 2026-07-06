@@ -396,6 +396,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional base directory for round artifacts. Defaults to ./runs.",
     )
+    round_cmd.add_argument(
+        "--round-progress-path",
+        default=None,
+        help="Optional path to publish a live per-candidate progress snapshot for the dashboard.",
+    )
     round_cmd.add_argument("--sn60-replicas-per-project", type=int, default=None)
     round_cmd.add_argument("--sn60-sandbox-root", default=None)
     round_cmd.add_argument("--sn60-benchmark-file", default=None)
@@ -573,6 +578,7 @@ def handle_round(args: argparse.Namespace) -> int:
         benchmark_file=args.sn60_benchmark_file,
         sandbox_commit=args.sn60_sandbox_commit,
         king_scoreboard_path=args.king_scoreboard,
+        progress_path=args.round_progress_path,
     )
     if args.json:
         print_json(

@@ -594,6 +594,7 @@ def test_run_sn60_round_ranks_candidates_and_picks_strict_winner(tmp_path: Path)
         _write_detection_bundle(path, detection)
         candidates.append((name, str(path)))
     scoreboard = tmp_path / "king_scoreboard.json"
+    progress_path = tmp_path / "round-progress.json"
 
     ran, execute, evaluate = _detection_hooks()
     result = run_sn60_round(
@@ -608,7 +609,18 @@ def test_run_sn60_round_ranks_candidates_and_picks_strict_winner(tmp_path: Path)
         king_scoreboard_path=str(scoreboard),
         execution_hook=execute,
         evaluation_hook=evaluate,
+        progress_path=str(progress_path),
     )
+
+    # Live progress is published: by the end every candidate is scored and the
+    # snapshot is marked completed with the winner.
+    import json as _json
+
+    progress = _json.loads(progress_path.read_text())
+    assert progress["state"] == "completed"
+    assert progress["winner_submission_id"] == "cand-c"
+    assert {c["submission_id"] for c in progress["candidates"]} == {"cand-a", "cand-b", "cand-c"}
+    assert all(c["done"] == c["total"] and c["state"] == "done" for c in progress["candidates"])
 
     # Ranked best-first by detection; the strict winner is the top one that beats the king.
     assert [entry.submission_id for entry in result.entries] == ["cand-c", "cand-b", "cand-a"]
