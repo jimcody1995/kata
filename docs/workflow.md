@@ -40,9 +40,11 @@ pending entrant; a round scores every pending entrant against the king at once.
    open PR at a time.
 3. **Validate locally.** The miner runs `kata submission validate` before opening the PR.
 4. **Open PR.** The PR targets the default competition branch and only touches the
-   submission bundle.
+   submission bundle. The submission directory/id prefix and `submission.json`
+   `author` must match the GitHub account that opens the PR.
 5. **Intake.** `kata-bot` screens the PR (shape + cheap static anti-cheat) and labels it
-   `kata:pending` — it now waits for the next round. A failing PR is closed `kata:invalid`.
+   `kata:pending` — it now waits for the next round. A failing or identity-mismatched
+   PR is closed `kata:invalid` before pending.
    Pushing a commit to a benched (`kata:stale`) PR re-enters it as `kata:pending`.
 
 **Round — when a competition round is run (`kata-bot run-round-env`):**

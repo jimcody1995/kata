@@ -87,7 +87,7 @@ For SN60 today:
 submissions/sn60__bitsec/miner/<submission-id>/
 ```
 
-Recommended `submission_id` format:
+Required `submission_id` format:
 
 ```text
 <github-username>-YYYYMMDD-NN
@@ -98,6 +98,11 @@ Example:
 ```text
 alice-20260704-01
 ```
+
+The `<github-username>` prefix must match the GitHub account that opens the PR.
+For example, if the PR author is `jonathanchang31`, then
+`jonathan-20260707-01` is invalid. `kata-bot` closes identity mismatches as
+`kata:invalid` before adding `kata:pending`, so the PR will not enter a round.
 
 ## Required Files
 
@@ -182,7 +187,7 @@ Requirements:
 - `subnet_pack` should be `sn60__bitsec` for the live lane.
 - `mode` must be `miner`.
 - `submission_id` should match the directory name.
-- `author` should be the GitHub username.
+- `author` must match the GitHub username that opens the PR.
 
 `subnet_pack` is the canonical field. The older `repo_pack` field is accepted
 only as a legacy alias.
@@ -349,6 +354,8 @@ Before opening a PR, verify:
   `agent.py`.
 - `submission.json` uses schema version `2`, `subnet_pack`, mode `miner`, and a
   unique `submission_id`.
+- The submission directory/id prefix and `submission.json` `author` match the
+  GitHub username that opened the PR.
 - No helper files are included.
 - No symlinks are included.
 - No hardcoded API keys or provider tokens are included.

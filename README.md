@@ -111,7 +111,8 @@ a pending entrant; a round scores every pending entrant at once.
 
 1. **Submit.** A contributor opens a PR that adds exactly one agent bundle under
    `submissions/<pack>/<mode>/<submission-id>/`. Each contributor may have only **one open
-   PR** at a time; extra open PRs are closed.
+   PR** at a time; extra open PRs are closed. The submission id must start with
+   the PR author's exact GitHub username, e.g. `<github-username>-YYYYMMDD-NN`.
 2. **Intake.** `kata-bot` screens the PR (shape + cheap static anti-cheat) and labels it
    `kata:pending` — it is now queued for the next round. A failing PR is closed
    `kata:invalid`. Pushing a new commit to a benched (`kata:stale`) PR re-enters it as
@@ -153,13 +154,13 @@ submissions/<pack>/<mode>/<submission-id>/
 ```bash
 # 1. scaffold a submission
 uv run kata submission init \
-  --subnet-pack sn60__bitsec --mode miner --submission-id you-20260703-01
+  --subnet-pack sn60__bitsec --mode miner --submission-id <your-github-username>-20260703-01
 
-# 2. edit submissions/sn60__bitsec/miner/you-20260703-01/agent.py
+# 2. edit submissions/sn60__bitsec/miner/<your-github-username>-20260703-01/agent.py
 
 # 3. validate it locally before opening a PR
 uv run kata submission validate \
-  --path submissions/sn60__bitsec/miner/you-20260703-01
+  --path submissions/sn60__bitsec/miner/<your-github-username>-20260703-01
 
 # 4. commit on a branch, push, and open a PR against the default branch
 ```
