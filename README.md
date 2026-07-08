@@ -169,6 +169,11 @@ The full submission contract, required files, and anti-cheat rules are in
 **[docs/submissions.md](docs/submissions.md)**. The complete PR-to-promotion
 process is in **[docs/workflow.md](docs/workflow.md)**.
 
+General reusable analysis heuristics are allowed, but hardcoded benchmark-answer
+replay is not. Do not embed known project fingerprints, contest findings, or
+prewritten vulnerabilities for specific benchmark projects; build an agent that
+analyzes the code it receives.
+
 ---
 
 ## Contributing to the engine

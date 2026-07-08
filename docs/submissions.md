@@ -65,7 +65,8 @@ Current submission scope:
 - one submission directory per PR
 - one subnet-pack and mode per submission
 - self-contained SN60 agents in `agent.py`
-- no API keys, benchmark answers, helper files, or validator configuration
+- no API keys, benchmark answers, benchmark-specific answer replay, helper files,
+  or validator configuration
 
 ## Directory Layout
 
@@ -140,6 +141,12 @@ Requirements:
   agent that does no analysis is rejected up front (see the screening gate below).
   A *non-stub* agent that happens to find nothing on a run is fine — it just
   scores 0 there, it is not rejected.
+- General reusable detectors are allowed. For example, an agent may parse code and
+  report a risk when a generic pattern such as "external call before state update"
+  appears.
+- Benchmark-specific answer replay is not allowed. Do not hardcode findings for
+  specific benchmark projects, exact project fingerprints, known contest findings,
+  or branches that recognize a known project and return prewritten vulnerabilities.
 - The file must contain valid Python syntax.
 - The file must not be the scaffold placeholder.
 - The implementation must be self-contained for SN60 V1.
@@ -305,6 +312,10 @@ these and your submission is guaranteed a fair, full evaluation in the next roun
 - No benchmark answer-key leakage tokens (for example `expected_findings`,
   `ground_truth`, `curated-highs-only`, `scabench`). Find the bugs — do not try
   to read the answers.
+- No benchmark-specific answer replay. This includes hardcoded benchmark project IDs,
+  known finding IDs or report titles, project-fingerprint branches, or prewritten
+  vulnerability maps for known benchmark projects. General static-analysis heuristics
+  are allowed only when they are reusable across projects and do real analysis.
 - Your agent is not a copy of the current king.
 
 ### 2. The round — bad, empty, or slow output NEVER closes your PR
@@ -361,6 +372,8 @@ Before opening a PR, verify:
 - No hardcoded API keys or provider tokens are included.
 - No validator-only environment variables are referenced.
 - No benchmark answers, oracle files, or private scorer data are referenced.
+- No hardcoded findings for specific benchmark projects, exact project fingerprints,
+  known contest answers, or prewritten vulnerability replay logic are included.
 - No model sampling overrides are hardcoded.
 - The bundle stays under current size and file-count limits.
 
@@ -397,6 +410,8 @@ Kata rejects submissions for:
 - hardcoded secret-like values
 - references to validator/provider secret env vars
 - benchmark-answer leakage indicators
+- hardcoded benchmark replay, including project-specific prewritten findings or
+  exact benchmark project/finding fingerprints
 - provider endpoint or model override attempts
 
 ## Scoring Conditions

@@ -83,6 +83,9 @@ Validation checks the candidate bundle before any expensive sandbox work:
 - the bundle is self-contained and within size limits
 - obvious secret leakage, benchmark-answer leakage, and sampling overrides are
   rejected
+- benchmark-specific answer replay is rejected; agents may use general reusable
+  analysis heuristics, but must not recognize known benchmark projects and return
+  prewritten findings
 
 ### 2. Screening
 
@@ -95,6 +98,8 @@ checks (no model calls). If any fail, the PR is closed immediately with the reas
 - helper files in SN60 V1 bundles
 - hardcoded provider keys or validator-secret env references
 - benchmark-answer leakage indicators
+- benchmark-specific answer replay, including exact project fingerprints, known
+  finding IDs, or prewritten findings for known benchmark projects
 - async or non-callable `agent_main`
 - a stub that directly returns `{"vulnerabilities": []}` without doing any analysis
 
