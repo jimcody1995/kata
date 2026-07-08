@@ -202,7 +202,9 @@ At the end of a round, each PR resolves to one outcome (and its label):
   one-per-contributor limit; closed.
 - **Review** (`kata:review`) — suspicious but non-conclusive screening evidence; held out
   of rounds until a maintainer approves with `/kata approve-review` or the miner pushes a
-  clean update.
+  clean update. If `KATA_SCREENING_LLM_REVIEW=1` is enabled, a local Codex CLI review
+  (`KATA_SCREENING_LLM_MODEL=gpt-5.4` by default) may add review evidence and an
+  audit artifact, but it never hard-rejects by itself.
 - **Stale** (`kata:stale`) — a kept-open PR that was unchanged since it last competed (same
   commit and same king), so it is skipped this round; a push re-enters it as pending.
 - **Hold** (`kata:hold`) — a winner whose merge is currently blocked (merge conflict, or a

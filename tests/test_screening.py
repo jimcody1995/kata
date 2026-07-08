@@ -11,6 +11,7 @@ from kata.screening import (
     validate_sn60_static_screening,
 )
 from kata.screening_system import screen_submission
+from kata.screening_system.models import ScreeningFinding
 
 SCREENING_DESCRIPTION = (
     "A privileged state-changing function can be called by any account, "
@@ -285,6 +286,71 @@ def test_screen_submission_keeps_ambiguous_fingerprint_as_review_in_strict_mode(
     rule_ids = {finding.rule_id for finding in decision.review_reasons}
     assert "benchmark_replay.project_fingerprint_branch" in rule_ids
     assert "benchmark_replay.early_return_fingerprint" in rule_ids
+
+
+def test_screen_submission_attaches_llm_review_for_review_findings(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    benchmark_path = write_replay_benchmark(tmp_path)
+    monkeypatch.setenv("KATA_SN60_BENCHMARK_FILE", str(benchmark_path))
+    monkeypatch.setenv("KATA_SCREENING_LLM_REVIEW", "1")
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        "    source = ''\n"
+        "    if 'SecondSwap_VestingManager' in source and 'grantorVesting' in source:\n"
+        "        return {'vulnerabilities': [{'title': 'x', 'description': 'y'}]}\n"
+        "    return {'vulnerabilities': [{\n"
+        "        'title': 'Generic issue',\n"
+        f"        'description': {SCREENING_DESCRIPTION!r},\n"
+        "        'severity': 'high',\n"
+        "        'file': 'contracts/Admin.sol',\n"
+        "    }]}\n",
+    )
+
+    def fake_llm_review(**_kwargs):
+        return (
+            [
+                ScreeningFinding(
+                    rule_id="llm_review.suspicious",
+                    severity="review",
+                    path=None,
+                    line=None,
+                    reason="LLM review supports holding this submission.",
+                    evidence="verdict=suspicious; confidence=0.80",
+                )
+            ],
+            [
+                ScreeningFinding(
+                    rule_id="llm_review.result",
+                    severity="note",
+                    path=None,
+                    line=None,
+                    reason="LLM review verdict `suspicious`.",
+                    evidence="model=gpt-5.4",
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "kata.screening_system.engine.review_suspicious_submission_with_llm",
+        fake_llm_review,
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+        enable_review=True,
+    )
+
+    assert decision.status == "review"
+    assert any(finding.rule_id == "llm_review.suspicious" for finding in decision.review_reasons)
+    assert any(note.rule_id == "llm_review.result" for note in decision.notes)
 
 
 def test_screen_submission_reviews_large_static_report_bank(tmp_path: Path) -> None:

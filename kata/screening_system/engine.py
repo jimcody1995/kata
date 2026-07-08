@@ -10,6 +10,7 @@ from kata.screening_system.benchmark_replay import (
     analyze_benchmark_replay,
     is_concrete_replay_finding,
 )
+from kata.screening_system.llm_review import review_suspicious_submission_with_llm
 from kata.screening_system.models import ScreeningDecision, ScreeningFinding
 
 STRICT_REPLAY_ENV = "KATA_SCREENING_STRICT_REPLAY"
@@ -50,6 +51,7 @@ def screen_submission(
     ]
     bundle_files = load_bundle_files(submission_root)
     review_findings, review_score = analyze_benchmark_replay(bundle_files)
+    notes: list[ScreeningFinding] = []
     if resolve_strict_replay(strict_replay):
         concrete_findings = [
             finding for finding in review_findings if is_concrete_replay_finding(finding)
@@ -63,17 +65,31 @@ def screen_submission(
             status="reject",
             reject_reasons=reject_findings,
             review_reasons=review_findings,
+            notes=notes,
             score=review_score,
         )
+    llm_findings, llm_notes = review_suspicious_submission_with_llm(
+        submission_root=submission_root,
+        bundle_files=bundle_files,
+        decision=ScreeningDecision(
+            status="review" if review_findings else "pass",
+            review_reasons=review_findings,
+            score=review_score,
+        ),
+    )
+    review_findings.extend(llm_findings)
+    notes.extend(llm_notes)
     if review_findings and resolve_review_mode(enable_review):
         return ScreeningDecision(
             status="review",
             review_reasons=review_findings,
+            notes=notes,
             score=review_score,
         )
     return ScreeningDecision(
         status="pass",
         review_reasons=review_findings,
+        notes=notes,
         score=review_score,
     )
 

@@ -325,6 +325,13 @@ not closed. A maintainer may approve a review hold by commenting exactly
 latest code still passes all hard rejection checks; concrete replay, identity mismatch,
 or invalid shape cannot be bypassed by approval.
 
+Kata can also run an optional second-stage LLM review for `kata:review` cases. Enable it
+with `KATA_SCREENING_LLM_REVIEW=1`; the default backend is the local Codex CLI using
+`KATA_SCREENING_LLM_MODEL=gpt-5.4` unless overridden. LLM review adds concise evidence
+and, when `KATA_SCREENING_LLM_ARTIFACT_DIR` is set, writes an audit artifact for
+maintainers. It never auto-closes a PR by itself: deterministic screening remains the
+authority for hard rejection.
+
 ### 2. The round — bad, empty, or slow output NEVER closes your PR
 
 Once static screening passes and the round runs, your agent is scored against **every**
