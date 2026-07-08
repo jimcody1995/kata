@@ -625,6 +625,7 @@ def test_validate_submission_rejects_replay_signals_when_strict_enabled(
     result = validate_submission(str(submission_root), repo_root=str(repo_root))
 
     assert any("rejected hardcoded benchmark replay" in reason for reason in result.reasons)
+    assert any(reason.startswith("agent.py:1: ") for reason in result.reasons)
     assert not result.is_valid
 
 
@@ -661,6 +662,7 @@ def test_validate_submission_rejects_known_answer_text_when_strict_enabled(
     result = validate_submission(str(submission_root), repo_root=str(repo_root))
 
     assert any("rejected hardcoded benchmark replay" in reason for reason in result.reasons)
+    assert any(reason.startswith("agent.py:1: ") for reason in result.reasons)
     assert not result.is_valid
 
 

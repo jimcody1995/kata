@@ -111,6 +111,12 @@ class BenchmarkReplaySignatures:
     fingerprint_hashes_by_project: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class WordWindowMatch:
+    digest: str
+    start_offset: int
+
+
 def analyze_benchmark_replay(bundle_files: dict[str, str]) -> tuple[list[ScreeningFinding], int]:
     """Return concrete replay and ambiguous replay-review signals."""
     findings: list[ScreeningFinding] = []
@@ -181,11 +187,13 @@ def find_known_answer_text_signals(
     findings: list[ScreeningFinding] = []
     seen: set[tuple[str, str]] = set()
     for relative_path, content in python_sources(bundle_files):
-        source_words = normalize_words(content)
-        title_match = first_matching_window_hash(
+        word_matches = normalize_word_matches(content)
+        source_words = [word for word, _offset in word_matches]
+        title_match = first_matching_window_match(
             source_words,
             signatures.title_word_counts,
             signatures.title_hashes,
+            word_matches,
         )
         if title_match is not None and (relative_path, "title") not in seen:
             seen.add((relative_path, "title"))
@@ -194,13 +202,15 @@ def find_known_answer_text_signals(
                     rule_id="benchmark_replay.title_text",
                     severity="review",
                     path=relative_path,
-                    line=None,
+                    line=line_for_offset(content, title_match.start_offset),
                     reason="SN60 screening found exact known benchmark finding title text.",
-                    evidence=f"hash={title_match[:16]}; points=6",
+                    evidence=f"hash={title_match.digest[:16]}; points=6",
                 )
             )
         for word_count, hashes in sorted(signatures.long_answer_hashes_by_word_count.items()):
-            answer_match = first_matching_window_hash(source_words, {word_count}, hashes)
+            answer_match = first_matching_window_match(
+                source_words, {word_count}, hashes, word_matches
+            )
             if answer_match is None or (relative_path, "answer") in seen:
                 continue
             seen.add((relative_path, "answer"))
@@ -209,9 +219,9 @@ def find_known_answer_text_signals(
                     rule_id="benchmark_replay.long_answer_text",
                     severity="review",
                     path=relative_path,
-                    line=None,
+                    line=line_for_offset(content, answer_match.start_offset),
                     reason="SN60 screening found exact known benchmark answer text.",
-                    evidence=f"hash={answer_match[:16]}; points=6",
+                    evidence=f"hash={answer_match.digest[:16]}; points=6",
                 )
             )
     return findings
@@ -520,18 +530,37 @@ def first_matching_window_hash(
     word_counts: set[int] | frozenset[int],
     signatures: set[str] | frozenset[str],
 ) -> str | None:
+    match = first_matching_window_match(
+        words,
+        word_counts,
+        signatures,
+        [(word, 0) for word in words],
+    )
+    return match.digest if match is not None else None
+
+
+def first_matching_window_match(
+    words: list[str],
+    word_counts: set[int] | frozenset[int],
+    signatures: set[str] | frozenset[str],
+    word_matches: list[tuple[str, int]],
+) -> WordWindowMatch | None:
     for word_count in sorted(word_counts):
         if word_count <= 0 or len(words) < word_count:
             continue
         for start in range(0, len(words) - word_count + 1):
             digest = hash_words(words[start : start + word_count])
             if digest in signatures:
-                return digest
+                return WordWindowMatch(digest=digest, start_offset=word_matches[start][1])
     return None
 
 
 def normalize_words(text: str) -> list[str]:
     return WORD_PATTERN.findall(text.lower())
+
+
+def normalize_word_matches(text: str) -> list[tuple[str, int]]:
+    return [(match.group(0), match.start()) for match in WORD_PATTERN.finditer(text.lower())]
 
 
 def hash_words(words: list[str]) -> str:

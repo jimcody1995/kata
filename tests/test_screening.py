@@ -248,6 +248,9 @@ def test_screen_submission_rejects_known_title_and_answer_text_in_strict_mode(
     assert "benchmark_replay.title_text" in rule_ids
     assert "benchmark_replay.long_answer_text" in rule_ids
     assert all(finding.severity == "reject" for finding in decision.reject_reasons)
+    lines_by_rule = {finding.rule_id: finding.line for finding in decision.reject_reasons}
+    assert lines_by_rule["benchmark_replay.title_text"] == 1
+    assert lines_by_rule["benchmark_replay.long_answer_text"] == 3
     assert all(
         "rejected hardcoded benchmark replay: Remove" not in reason
         for reason in decision.rejection_messages()

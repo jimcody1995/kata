@@ -111,7 +111,10 @@ def validate_submission_candidate(
             render_screening_finding(finding) for finding in screening_decision.notes
         ]
         screening_score = screening_decision.score
-        reasons = screening_decision.rejection_messages()
+        reasons = [
+            render_screening_finding(finding)
+            for finding in screening_decision.reject_reasons
+        ]
     else:
         bundle_files = load_bundle_files(submission_root)
         reasons = [
