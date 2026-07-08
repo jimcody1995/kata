@@ -68,10 +68,14 @@ def test_llm_review_invokes_codex_and_adds_review_finding(
     assert timeout_seconds == 180
     assert cwd == tmp_path.resolve()
     assert "Return JSON only" in prompt
+    assert "only runs after deterministic screening has already marked the PR suspicious" in prompt
     assert "Use the Kata submission rules below" in prompt
     assert "accept as much honest generic analysis as possible" in prompt
     assert "The miner must not hardcode benchmark project IDs" in prompt
     assert "Weak or low-quality generic analysis is allowed" in prompt
+    assert "Confidence rubric:" in prompt
+    assert "0.70-0.89 = high confidence" in prompt
+    assert "not how good the miner is" in prompt
     assert findings[0].rule_id == "llm_review.suspicious"
     assert findings[0].severity == "review"
     assert notes[0].rule_id == "llm_review.result"
