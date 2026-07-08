@@ -44,7 +44,9 @@ pending entrant; a round scores every pending entrant against the king at once.
    `author` must match the GitHub account that opens the PR.
 5. **Intake.** `kata-bot` screens the PR (shape + cheap static anti-cheat) and labels it
    `kata:pending` — it now waits for the next round. A failing or identity-mismatched
-   PR is closed `kata:invalid` before pending.
+   PR is closed `kata:invalid` before pending. Suspicious but non-conclusive evidence is
+   held as `kata:review`; maintainers can clear it with `/kata approve-review` after
+   manual review, but hard rejects cannot be bypassed.
    Pushing a commit to a benched (`kata:stale`) PR re-enters it as `kata:pending`.
 
 **Round — when a competition round is run (`kata-bot run-round-env`):**
@@ -198,6 +200,9 @@ At the end of a round, each PR resolves to one outcome (and its label):
 - **Losing** (`kata:losing`) — a candidate that competed but did not beat the king; closed.
 - **Invalid** (`kata:invalid`) — failed screening, or an extra open PR beyond the
   one-per-contributor limit; closed.
+- **Review** (`kata:review`) — suspicious but non-conclusive screening evidence; held out
+  of rounds until a maintainer approves with `/kata approve-review` or the miner pushes a
+  clean update.
 - **Stale** (`kata:stale`) — a kept-open PR that was unchanged since it last competed (same
   commit and same king), so it is skipped this round; a push re-enters it as pending.
 - **Hold** (`kata:hold`) — a winner whose merge is currently blocked (merge conflict, or a

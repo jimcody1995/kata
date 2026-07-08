@@ -56,7 +56,7 @@ from kata.public_artifacts import (
     resolve_kata_root,
     resolve_public_king_root,
 )
-from kata.screening_system import screen_submission
+from kata.screening_system import ScreeningFinding, screen_submission
 from kata.util import dedupe
 
 SUBMISSIONS_DIRNAME = "submissions"
@@ -162,10 +162,23 @@ class SubmissionValidationResult:
     reasons: list[str]
     metadata: SubmissionMetadata | None
     evaluator_id: str | None = None
+    screening_status: str | None = None
+    screening_review_reasons: list[str] = field(default_factory=list)
+    screening_notes: list[str] = field(default_factory=list)
+    screening_score: int = 0
 
     @property
     def is_valid(self) -> bool:
         return not self.reasons and not self.off_scope_paths
+
+
+@dataclass(frozen=True)
+class SubmissionCandidateValidation:
+    reasons: list[str] = field(default_factory=list)
+    screening_status: str | None = None
+    screening_review_reasons: list[str] = field(default_factory=list)
+    screening_notes: list[str] = field(default_factory=list)
+    screening_score: int = 0
 
 
 @dataclass(frozen=True)
@@ -264,6 +277,7 @@ def validate_submission(
     reasons: list[str] = []
     off_scope_paths: list[str] = []
     metadata: SubmissionMetadata | None = None
+    candidate_validation = SubmissionCandidateValidation()
 
     resolved_repo_root = Path(repo_root).expanduser().resolve() if repo_root else None
     root = Path(submission_path).expanduser().resolve()
@@ -345,13 +359,12 @@ def validate_submission(
             validate_submission_target(metadata, public_root=public_root)
         )
         if agent_path.exists():
-            reasons.extend(
-                validate_submission_candidate(
-                    metadata=metadata,
-                    submission_root=descriptor.root,
-                    public_root=public_root,
-                )
+            candidate_validation = validate_submission_candidate(
+                metadata=metadata,
+                submission_root=descriptor.root,
+                public_root=public_root,
             )
+            reasons.extend(candidate_validation.reasons)
 
     evaluator_entry = find_evaluator_pack_entry(
         descriptor.repo_pack, descriptor.mode, public_root=public_root
@@ -368,6 +381,10 @@ def validate_submission(
         reasons=dedupe(reasons),
         metadata=metadata,
         evaluator_id=evaluator_entry.evaluator_id if evaluator_entry else None,
+        screening_status=candidate_validation.screening_status,
+        screening_review_reasons=candidate_validation.screening_review_reasons,
+        screening_notes=candidate_validation.screening_notes,
+        screening_score=candidate_validation.screening_score,
     )
 
 
@@ -936,6 +953,14 @@ def render_submission_validation(result: SubmissionValidationResult) -> str:
     if result.reasons:
         lines.append("Reasons:")
         lines.extend(f"- {reason}" for reason in result.reasons)
+    if result.screening_status:
+        lines.append(f"Screening status: {result.screening_status}")
+    if result.screening_review_reasons:
+        lines.append("Screening review reasons:")
+        lines.extend(f"- {reason}" for reason in result.screening_review_reasons)
+    if result.screening_notes:
+        lines.append("Screening notes:")
+        lines.extend(f"- {note}" for note in result.screening_notes)
     return "\n".join(lines)
 
 
@@ -1093,8 +1118,12 @@ def validate_submission_candidate(
     metadata: SubmissionMetadata,
     submission_root: Path,
     public_root: str | None = None,
-) -> list[str]:
+) -> SubmissionCandidateValidation:
     reasons: list[str] = []
+    screening_status: str | None = None
+    screening_review_reasons: list[str] = []
+    screening_notes: list[str] = []
+    screening_score = 0
     unexpected_paths = find_unexpected_bundle_paths(submission_root)
     if unexpected_paths:
         reasons.append(
@@ -1139,6 +1168,15 @@ def validate_submission_candidate(
             public_root=Path(public_root).expanduser().resolve() if public_root else None,
             mode=metadata.mode,
         )
+        screening_status = screening_decision.status
+        screening_review_reasons = [
+            render_screening_finding(finding)
+            for finding in screening_decision.review_reasons
+        ]
+        screening_notes = [
+            render_screening_finding(finding) for finding in screening_decision.notes
+        ]
+        screening_score = screening_decision.score
         reasons.extend(screening_decision.rejection_messages())
 
     reasons.extend(validate_bundle_python_sources(bundle_files))
@@ -1151,7 +1189,23 @@ def validate_submission_candidate(
             public_root=public_root,
         )
     )
-    return dedupe(reasons)
+    return SubmissionCandidateValidation(
+        reasons=dedupe(reasons),
+        screening_status=screening_status,
+        screening_review_reasons=dedupe(screening_review_reasons),
+        screening_notes=dedupe(screening_notes),
+        screening_score=screening_score,
+    )
+
+
+def render_screening_finding(finding: ScreeningFinding) -> str:
+    location = ""
+    if finding.path:
+        location = finding.path
+        if finding.line is not None:
+            location += f":{finding.line}"
+        location += ": "
+    return f"{location}{finding.reason}"
 
 
 def find_evaluator_pack_entry(

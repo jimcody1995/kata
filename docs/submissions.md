@@ -31,7 +31,8 @@ What this means for you:
   to re-enter it. A newly promoted king also re-enters every pending PR automatically.
 - The labels you'll see: `kata:pending` (waiting), `kata:executing` (competing now),
   `kata:winner:<pack>` (won), `kata:losing` (didn't beat the king), `kata:invalid`
-  (rejected), `kata:stale` (benched), `kata:hold` (won but merge blocked).
+  (rejected), `kata:review` (held for maintainer screening review), `kata:stale`
+  (benched), `kata:hold` (won but merge blocked).
 
 ### Winner reward labels
 
@@ -317,6 +318,12 @@ these and your submission is guaranteed a fair, full evaluation in the next roun
   vulnerability maps for known benchmark projects. General static-analysis heuristics
   are allowed only when they are reusable across projects and do real analysis.
 - Your agent is not a copy of the current king.
+
+Suspicious-but-not-conclusive screening evidence is held as `kata:review`, not scored and
+not closed. A maintainer may approve a review hold by commenting exactly
+`/kata approve-review` on the PR. Approval moves the PR to `kata:pending` only if the
+latest code still passes all hard rejection checks; concrete replay, identity mismatch,
+or invalid shape cannot be bypassed by approval.
 
 ### 2. The round — bad, empty, or slow output NEVER closes your PR
 

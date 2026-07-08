@@ -51,6 +51,42 @@ def write_sandbox_source(root: Path) -> Path:
     return benchmark_path
 
 
+def write_replay_benchmark(root: Path) -> Path:
+    benchmark_path = root / "curated-highs-only-2025-08-08.json"
+    benchmark_path.write_text(
+        json.dumps(
+            [
+                {
+                    "project_id": "sample_project",
+                    "name": "Sample Project",
+                    "codebases": [
+                        {
+                            "codebase_id": "SecondSwap_VestingManager_test",
+                            "repo_url": "https://example.test/secondswap",
+                        }
+                    ],
+                    "vulnerabilities": [
+                        {
+                            "finding_id": "2026-01-sample_H-01",
+                            "severity": "high",
+                            "title": "Exact Replay Title For Screening",
+                            "description": (
+                                "SecondSwap_VestingManager grantorVesting stepsClaimed "
+                                "transferVesting MarketplaceToken allows replayed answer "
+                                "text to be detected when a candidate copies a long "
+                                "known benchmark explanation into its static report bank."
+                            ),
+                        }
+                    ],
+                }
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return benchmark_path
+
+
 def test_validate_sn60_static_screening_rejects_helper_files_and_leak_tokens(
     tmp_path: Path,
 ) -> None:
@@ -141,6 +177,146 @@ def test_screen_submission_can_promote_replay_signals_to_review_status(
     assert not decision.passed
     assert decision.score == 6
     assert decision.review_reasons[0].line == 1
+
+
+def test_screen_submission_rejects_replay_signals_in_strict_mode(
+    tmp_path: Path,
+) -> None:
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "PROJECT = 'code4rena_mantra-dex_2025_03'\n"
+        + VALID_AGENT_SOURCE,
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+        strict_replay=True,
+    )
+
+    assert decision.status == "reject"
+    assert not decision.passed
+    assert decision.review_reasons == []
+    assert decision.reject_reasons[0].severity == "reject"
+    assert "rejected hardcoded benchmark replay" in decision.rejection_messages()[0]
+
+
+def test_screen_submission_rejects_known_title_and_answer_text_in_strict_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    benchmark_path = write_replay_benchmark(tmp_path)
+    monkeypatch.setenv("KATA_SN60_BENCHMARK_FILE", str(benchmark_path))
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "TITLE = 'Exact Replay Title For Screening'\n"
+        "ANSWER = (\n"
+        "    'SecondSwap_VestingManager grantorVesting stepsClaimed transferVesting '\n"
+        "    'MarketplaceToken allows replayed answer text to be detected when a '\n"
+        "    'candidate copies a long known benchmark explanation into its static '\n"
+        "    'report bank.'\n"
+        ")\n"
+        + VALID_AGENT_SOURCE,
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+        strict_replay=True,
+    )
+
+    assert decision.status == "reject"
+    rule_ids = {finding.rule_id for finding in decision.reject_reasons}
+    assert "benchmark_replay.title_text" in rule_ids
+    assert "benchmark_replay.long_answer_text" in rule_ids
+    assert all(finding.severity == "reject" for finding in decision.reject_reasons)
+
+
+def test_screen_submission_keeps_ambiguous_fingerprint_as_review_in_strict_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    benchmark_path = write_replay_benchmark(tmp_path)
+    monkeypatch.setenv("KATA_SN60_BENCHMARK_FILE", str(benchmark_path))
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        "    source = ''\n"
+        "    if (\n"
+        "        'SecondSwap_VestingManager' in source\n"
+        "        and 'grantorVesting' in source\n"
+        "        and 'stepsClaimed' in source\n"
+        "    ):\n"
+        "        return {'vulnerabilities': [{\n"
+        "            'title': 'Suspicious static issue',\n"
+        "            'description': 'This is a long enough suspicious static report.',\n"
+        "            'severity': 'high',\n"
+        "            'file': 'contracts/Example.sol',\n"
+        "        }]}\n"
+        "    return {'vulnerabilities': [{\n"
+        "        'title': 'Generic issue',\n"
+        f"        'description': {SCREENING_DESCRIPTION!r},\n"
+        "        'severity': 'high',\n"
+        "        'file': 'contracts/Admin.sol',\n"
+        "    }]}\n",
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+        enable_review=True,
+        strict_replay=True,
+    )
+
+    assert decision.status == "review"
+    assert decision.reject_reasons == []
+    rule_ids = {finding.rule_id for finding in decision.review_reasons}
+    assert "benchmark_replay.project_fingerprint_branch" in rule_ids
+    assert "benchmark_replay.early_return_fingerprint" in rule_ids
+
+
+def test_screen_submission_reviews_large_static_report_bank(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "candidate"
+    reports = ",\n".join(
+        "{'title': 'Issue %s', 'description': %r, 'severity': 'high', 'file': 'A.sol'}"
+        % (index, SCREENING_DESCRIPTION)
+        for index in range(3)
+    )
+    write_bundle(
+        bundle_root,
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        f"    reports = [{reports}]\n"
+        "    return {'vulnerabilities': reports}\n",
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+        enable_review=True,
+        strict_replay=True,
+    )
+
+    assert decision.status == "review"
+    assert decision.reject_reasons == []
+    assert any(
+        finding.rule_id == "benchmark_replay.static_report_bank"
+        for finding in decision.review_reasons
+    )
 
 
 def test_screen_submission_allows_generic_reusable_detector(tmp_path: Path) -> None:

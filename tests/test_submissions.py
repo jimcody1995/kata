@@ -93,6 +93,37 @@ def validation_reasons(tmp_path, monkeypatch, agent_source):
     return validate_submission(str(submission_root), repo_root=str(repo_root)).reasons
 
 
+def write_replay_benchmark(root: Path) -> Path:
+    benchmark_path = root / "curated-highs-only-2025-08-08.json"
+    benchmark_path.write_text(
+        json.dumps(
+            [
+                {
+                    "project_id": "sample_project",
+                    "name": "Sample Project",
+                    "codebases": [],
+                    "vulnerabilities": [
+                        {
+                            "finding_id": "2026-01-sample_H-01",
+                            "severity": "high",
+                            "title": "Exact Replay Title For Validation",
+                            "description": (
+                                "ValidationReplayContract knownFunctionName "
+                                "knownStorageSlot copied benchmark answer text "
+                                "should be rejected when strict concrete replay "
+                                "screening is enabled for production intake."
+                            ),
+                        }
+                    ],
+                }
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return benchmark_path
+
+
 def test_validate_submission_accepts_scoped_pr_changes(tmp_path, monkeypatch) -> None:
     _, repo_root, submission_root = make_miner_submission(tmp_path, monkeypatch)
     rel = submission_root.relative_to(repo_root).as_posix()
@@ -495,6 +526,43 @@ def test_validate_submission_accepts_miner_submission_for_registry_lane(
 
     assert result.reasons == []
     assert result.is_valid
+    assert result.screening_status == "pass"
+    assert result.screening_score == 0
+    assert result.screening_review_reasons == []
+
+
+def test_validate_submission_holds_replay_signals_when_review_enabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    public_root = tmp_path / "kata-root"
+    write_evaluator_lane(public_root)
+    monkeypatch.setenv("KATA_ROOT", str(public_root))
+    monkeypatch.setenv("KATA_SCREENING_REVIEW_MODE", "1")
+
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="alice-20260702-01",
+        output_root=str(repo_root / "submissions"),
+        author="alice",
+    )
+    (submission_root / "agent.py").write_text(
+        "PROJECT = 'code4rena_secondswap_2025_02'\n" + VALID_MINER_AGENT,
+        encoding="utf-8",
+    )
+
+    result = validate_submission(str(submission_root), repo_root=str(repo_root))
+
+    assert result.reasons == []
+    assert result.is_valid
+    assert result.screening_status == "review"
+    assert result.screening_score == 6
+    assert any(
+        "code4rena_secondswap_2025_02" in reason
+        for reason in result.screening_review_reasons
+    )
     assert result.evaluator_id == "sn60_bitsec"
 
 
@@ -523,6 +591,76 @@ def test_validate_submission_keeps_replay_signals_report_only_by_default(
 
     assert result.reasons == []
     assert result.is_valid
+    assert result.screening_status == "pass"
+    assert result.screening_score == 6
+    assert any(
+        "code4rena_secondswap_2025_02" in reason
+        for reason in result.screening_review_reasons
+    )
+
+
+def test_validate_submission_rejects_replay_signals_when_strict_enabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    public_root = tmp_path / "kata-root"
+    write_evaluator_lane(public_root)
+    monkeypatch.setenv("KATA_ROOT", str(public_root))
+    monkeypatch.setenv("KATA_SCREENING_STRICT_REPLAY", "1")
+
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="alice-20260702-01",
+        output_root=str(repo_root / "submissions"),
+        author="alice",
+    )
+    (submission_root / "agent.py").write_text(
+        "PROJECT = 'code4rena_secondswap_2025_02'\n" + VALID_MINER_AGENT,
+        encoding="utf-8",
+    )
+
+    result = validate_submission(str(submission_root), repo_root=str(repo_root))
+
+    assert any("rejected hardcoded benchmark replay" in reason for reason in result.reasons)
+    assert not result.is_valid
+
+
+def test_validate_submission_rejects_known_answer_text_when_strict_enabled(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    public_root = tmp_path / "kata-root"
+    write_evaluator_lane(public_root)
+    benchmark_path = write_replay_benchmark(tmp_path)
+    monkeypatch.setenv("KATA_ROOT", str(public_root))
+    monkeypatch.setenv("KATA_SCREENING_STRICT_REPLAY", "1")
+    monkeypatch.setenv("KATA_SN60_BENCHMARK_FILE", str(benchmark_path))
+
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="alice-20260702-01",
+        output_root=str(repo_root / "submissions"),
+        author="alice",
+    )
+    (submission_root / "agent.py").write_text(
+        "TITLE = 'Exact Replay Title For Validation'\n"
+        "ANSWER = (\n"
+        "    'ValidationReplayContract knownFunctionName knownStorageSlot copied '\n"
+        "    'benchmark answer text should be rejected when strict concrete replay '\n"
+        "    'screening is enabled for production intake.'\n"
+        ")\n"
+        + VALID_MINER_AGENT,
+        encoding="utf-8",
+    )
+
+    result = validate_submission(str(submission_root), repo_root=str(repo_root))
+
+    assert any("rejected hardcoded benchmark replay" in reason for reason in result.reasons)
+    assert not result.is_valid
 
 
 def test_init_submission_rejects_inactive_registry_lane(
