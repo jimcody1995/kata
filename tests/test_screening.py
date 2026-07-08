@@ -91,6 +91,80 @@ def test_screen_submission_wraps_current_static_screening(tmp_path: Path) -> Non
     assert all(finding.rule_id == "sn60.static" for finding in decision.reject_reasons)
 
 
+def test_screen_submission_reports_exact_benchmark_replay_signals(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "PROJECT = 'code4rena_secondswap_2025_02'\n"
+        "FINDING = '2024-12-secondswap_H-01'\n"
+        + VALID_AGENT_SOURCE,
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+    )
+
+    assert decision.status == "pass"
+    assert decision.passed
+    assert decision.rejection_messages() == []
+    assert decision.score == 12
+    assert [finding.rule_id for finding in decision.review_reasons] == [
+        "benchmark_replay.project_id",
+        "benchmark_replay.finding_id",
+    ]
+
+
+def test_screen_submission_can_promote_replay_signals_to_review_status(
+    tmp_path: Path,
+) -> None:
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "PROJECT = 'code4rena_mantra-dex_2025_03'\n"
+        + VALID_AGENT_SOURCE,
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+        enable_review=True,
+    )
+
+    assert decision.status == "review"
+    assert not decision.passed
+    assert decision.score == 6
+    assert decision.review_reasons[0].line == 1
+
+
+def test_screen_submission_allows_generic_reusable_detector(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "def transfers_tokens_before_state_update(source):\n"
+        "    return '.call(' in source and 'balances[' in source\n"
+        + VALID_AGENT_SOURCE,
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+    )
+
+    assert decision.status == "pass"
+    assert decision.review_reasons == []
+    assert decision.score == 0
+
+
 def test_validate_sn60_static_screening_rejects_async_agent_main(
     tmp_path: Path,
 ) -> None:

@@ -498,6 +498,33 @@ def test_validate_submission_accepts_miner_submission_for_registry_lane(
     assert result.evaluator_id == "sn60_bitsec"
 
 
+def test_validate_submission_keeps_replay_signals_report_only_by_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    public_root = tmp_path / "kata-root"
+    write_evaluator_lane(public_root)
+    monkeypatch.setenv("KATA_ROOT", str(public_root))
+
+    repo_root = tmp_path / "Kata"
+    submission_root = init_submission(
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="alice-20260702-01",
+        output_root=str(repo_root / "submissions"),
+        author="alice",
+    )
+    (submission_root / "agent.py").write_text(
+        "PROJECT = 'code4rena_secondswap_2025_02'\n" + VALID_MINER_AGENT,
+        encoding="utf-8",
+    )
+
+    result = validate_submission(str(submission_root), repo_root=str(repo_root))
+
+    assert result.reasons == []
+    assert result.is_valid
+
+
 def test_init_submission_rejects_inactive_registry_lane(
     tmp_path: Path,
     monkeypatch,
