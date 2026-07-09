@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-"""SN60 miner: pattern library + repo triage + two batched deep audits.
+"""SN60 miner: repo triage plus two batched deep-audit passes.
 
-Built for the 3-call / 24k output-token budget. Static pattern detectors fire
-first (zero LLM cost) on known high-yield benchmark families; when they find
-enough shaped findings the agent returns immediately. Otherwise it spends call
-1 on repo triage and calls 2-3 on batched full-source deep audits.
+General-purpose vulnerability analysis for unseen codebases. Uses the
+3-call / 24k output-token budget: call 1 ranks targets from a compact repo
+map, calls 2-3 deep-audit batched full sources with matcher-shaped output.
+No hardcoded benchmark-family fingerprints or canned findings.
 """
 
 import json
@@ -52,30 +52,25 @@ RELATED_CAP = 3_500
 MAX_OUT = 8
 WALL = 230
 HTTP = 150
-EARLY_EXIT = 3
 CALL_CAP = 3
 
-RISK = (
+RISK_TERMS = (
     "delegatecall", ".call{", "selfdestruct", "tx.origin", "assembly", "ecrecover",
     "permit", "initialize", "upgradeTo", "onlyOwner", "onlyRole", "withdraw",
     "redeem", "deposit", "borrow", "liquidat", "collateral", "oracle", "flash",
-    "unchecked", "transferFrom", "cashIn", "createPair", "releaseRate",
-    "stepsClaimed", "divDown", "liquidatePositionBadDebt", "repayCreditAccount",
-    "StrategySupply", "harvest", "_deployedAmount", "provide_liquidity",
-    "slippage", "virtual_price", "amplification", "admin_fee", "get_dy",
-    "add_liquidity", "remove_liquidity", "exchange_underlying", "lock_pool",
-    "migration_token_allocation",
+    "unchecked", "transferFrom", "mint(", "burn(", "approve", "swap",
+    "slippage", "reentr", "external", "public",
 )
-NAMES = (
-    "vault", "pool", "stable", "router", "manager", "controller", "strategy",
-    "market", "oracle", "staking", "reward", "treasury", "bridge", "factory",
-    "proxy", "token", "vesting", "marketplace", "lambo", "virtual",
+NAME_TERMS = (
+    "vault", "pool", "router", "manager", "controller", "strategy", "market",
+    "oracle", "staking", "reward", "treasury", "bridge", "factory", "proxy",
+    "token", "lend", "borrow", "govern", "escrow", "auction",
 )
 
 SYS = (
     "You are a senior smart-contract security auditor. Return only real high or "
     "critical vulnerabilities with an exploitable path and material impact. "
-    "Reject style, gas, centralization, and low-confidence speculation. "
+    "Reject style, gas, centralization complaints, and low-confidence speculation. "
     "Think briefly then return final JSON only."
 )
 
@@ -129,25 +124,17 @@ def funcs(text: str) -> list[dict[str, str]]:
 def rank(rel: str, text: str) -> int:
     ln, lt = rel.lower(), text.lower()
     s = min(lt.count("function ") + lt.count("\ndef "), 35)
-    for t in NAMES:
+    for t in NAME_TERMS:
         if t in ln:
             s += 9
-    for t in RISK:
+    for t in RISK_TERMS:
         s += min(lt.count(t.lower()), 6) * 4
     if any(x in lt for x in ("external", "public", "@external")):
         s += 5
     if "nonreentrant" not in lt and any(x in lt for x in ("withdraw", "redeem", ".call{")):
         s += 8
-    if any(x in lt for x in ("stableswap", "get_dy", "add_liquidity", "amplification")):
-        s += 14
-    if any(x in lt for x in ("transfervesting", "stepsclaimed", "releaserate", "marketplace")):
-        s += 14
-    if any(x in lt for x in ("virtualtoken", "cashin", "lambofactory", "createpair")):
-        s += 14
-    if any(x in lt for x in ("liquidatepositionbaddebt", "updaterewardindex", "divdown")):
-        s += 14
-    if any(x in lt for x in ("strategysupply", "undeploy", "_deployedamount")):
-        s += 12
+    if "initializer" in lt or "upgrade" in lt:
+        s += 6
     return s
 
 
@@ -189,7 +176,7 @@ def state_vars(text: str) -> list[str]:
 
 def risk_lines(text: str) -> list[str]:
     out: list[str] = []
-    terms = [t.lower() for t in RISK]
+    terms = [t.lower() for t in RISK_TERMS]
     for i, line in enumerate(text.splitlines(), 1):
         low = line.lower()
         if any(t in low for t in terms):
@@ -313,293 +300,17 @@ def parse_obj(text: str) -> dict[str, Any]:
     return {}
 
 
-def mk_finding(
-    *,
-    title: str,
-    file: str,
-    contract: str,
-    function: str,
-    line: int | None,
-    severity: str,
-    mechanism: str,
-    impact: str,
-    description: str,
-) -> dict[str, Any]:
-    return {
-        "title": title[:220],
-        "file": file,
-        "contract": contract,
-        "function": function,
-        "line": line,
-        "severity": severity,
-        "mechanism": mechanism,
-        "impact": impact,
-        "description": description[:3000],
-    }
-
-
-def detect_stableswap(rec: dict[str, Any]) -> list[dict[str, Any]]:
-    rel, text = str(rec["rel"]), str(rec["text"])
-    compact = re.sub(r"\s+", "", text)
-    out: list[dict[str, Any]] = []
-    if not (rel.endswith(".vy") and "def add_liquidity(" in text and "def exchange(" in text and "self.balances" in text):
-        return out
-    c = Path(rel).stem
-    out.append(mk_finding(
-        title=f"{c}.add_liquidity - hardcoded rates misprice mixed-decimal stable deposits",
-        file=rel, contract=c, function="add_liquidity",
-        line=line_at(text, "def add_liquidity"), severity="high",
-        mechanism=(
-            "The pool converts balances through a static RATES array while add_liquidity adds raw "
-            "token amounts to self.balances without per-asset decimal normalization."
-        ),
-        impact="LP shares can be minted from the wrong invariant, shifting value between liquidity providers.",
-        description=(
-            f"In `{rel}`, contract `{c}`, function `add_liquidity()`, LP minting uses `_get_D_mem()` "
-            "over balances scaled by hardcoded rates while raw deposit amounts are written to "
-            "`self.balances`. Mixed-decimal assets therefore break the stable-swap invariant and "
-            "misprice deposits or withdrawals."
-        ),
-    ))
-    out.append(mk_finding(
-        title=f"{c}.calc_token_amount - aggregate LP slippage misses per-asset imbalance",
-        file=rel, contract=c, function="calc_token_amount",
-        line=line_at(text, "def calc_token_amount"), severity="high",
-        mechanism=(
-            "Liquidity slippage is checked only on aggregate LP minted (D1-D0), not per supplied asset, "
-            "so imbalanced reserves can satisfy min_mint while individual legs are mispriced."
-        ),
-        impact="Depositors can pass slippage while receiving wrong LP shares for the assets provided.",
-        description=(
-            f"In `{rel}`, contract `{c}`, function `calc_token_amount()`, the quote uses one aggregate "
-            "LP delta while `add_liquidity()` only enforces `_min_mint_amount` on the total mint. "
-            "Manipulated reserve ratios or token ordering can therefore bypass meaningful per-asset protection."
-        ),
-    ))
-    if "def exchange_underlying(" in text:
-        out.append(mk_finding(
-            title=f"{c}.exchange_underlying - split underlying route breaks stable-swap accounting",
-            file=rel, contract=c, function="exchange_underlying",
-            line=line_at(text, "def exchange_underlying"), severity="high",
-            mechanism=(
-                "Underlying swaps combine meta balances with base-pool conversions and cached virtual price, "
-                "splitting one trade across disjoint invariant steps."
-            ),
-            impact="Traders can extract value or leave LPs with stale pricing on the underlying path.",
-            description=(
-                f"In `{rel}`, contract `{c}`, function `exchange_underlying()`, routing mixes meta-pool "
-                "balance updates with base-pool operations instead of preserving a single joint invariant "
-                "across all underlying assets."
-            ),
-        ))
-    return out
-
-
-def detect_vesting(rec: dict[str, Any]) -> list[dict[str, Any]]:
-    rel, text = str(rec["rel"]), str(rec["text"])
-    compact = re.sub(r"\s+", "", text)
-    out: list[dict[str, Any]] = []
-    c = str(rec["contracts"][0] if rec["contracts"] else Path(rel).stem)
-    if "functiontransferVesting(" in compact and "grantorVesting.stepsClaimed" in text:
-        out.append(mk_finding(
-            title=f"{c}.transferVesting - purchased vesting inherits seller claimed steps",
-            file=rel, contract=c, function="transferVesting",
-            line=line_at(text, "function transferVesting"), severity="high",
-            mechanism=(
-                "Buyer vesting is created with grantorVesting.stepsClaimed, so prior seller claims reduce "
-                "the buyer's freshly purchased allocation."
-            ),
-            impact="Buyers lose claimable tokens depending on listing order and seller claim history.",
-            description=(
-                f"In `{rel}`, contract `{c}`, function `transferVesting()`, transferred vesting for the "
-                "buyer is initialized using the seller's `stepsClaimed`, corrupting the purchased schedule."
-            ),
-        ))
-        out.append(mk_finding(
-            title=f"{c}.transferVesting - grantor releaseRate ignores claimed steps",
-            file=rel, contract=c, function="transferVesting",
-            line=line_at(text, "grantorVesting.releaseRate"), severity="high",
-            mechanism=(
-                "After a sale, grantor releaseRate is recomputed with total steps instead of remaining "
-                "unclaimed steps, breaking claimable accounting."
-            ),
-            impact="Seller unlock amounts can exceed remaining locked tokens after vesting transfers.",
-            description=(
-                f"In `{rel}`, contract `{c}`, function `transferVesting()`, the grantor `releaseRate` is "
-                "reset using full step count rather than remaining unclaimed steps after partial claims."
-            ),
-        ))
-    if "function_createVesting(" in compact and "_vestings[_beneficiary].stepsClaimed" in text:
-        out.append(mk_finding(
-            title=f"{c}._createVesting - merged purchases lose per-listing vesting progress",
-            file=rel, contract=c, function="_createVesting",
-            line=line_at(text, "function _createVesting"), severity="high",
-            mechanism=(
-                "Additional purchased vesting merges into one beneficiary record and recomputes releaseRate "
-                "from existing stepsClaimed instead of preserving each listing's progress."
-            ),
-            impact="Claimable balances depend on purchase order, shifting value between buyers and sellers.",
-            description=(
-                f"In `{rel}`, contract `{c}`, function `_createVesting()`, multiple purchases collapse into "
-                "one beneficiary schedule so listing order changes claimable amounts."
-            ),
-        ))
-    return out
-
-
-def detect_lambowin(rec: dict[str, Any]) -> list[dict[str, Any]]:
-    rel, text = str(rec["rel"]), str(rec["text"])
-    out: list[dict[str, Any]] = []
-    low = text.lower()
-    if "function cashin" in low or "function cashIn" in text:
-        if "msg.value" in text and ("amount" in text or "_amount" in text):
-            c = "VirtualToken" if "VirtualToken" in text else (
-                str(rec["contracts"][0]) if rec["contracts"] else Path(rel).stem
-            )
-            out.append(mk_finding(
-                title=f"{c}.cashIn - uses msg.value instead of amount for ERC20 minting",
-                file=rel, contract=c, function="cashIn",
-                line=line_at(text, "cashIn"), severity="high",
-                mechanism=(
-                    "cashIn mints virtual tokens from msg.value even when callers pass an ERC20 amount, "
-                    "so ERC20 deposits mint zero while tokens are transferred in."
-                ),
-                impact="Users lose deposited ERC20 tokens and receive no virtual tokens in return.",
-                description=(
-                    f"In `{rel}`, contract `{c}`, function `cashIn()`, minting relies on `msg.value` "
-                    "instead of the ERC20 `amount` parameter. For token deposits msg.value is zero, so "
-                    "users transfer assets but receive no minted balance."
-                ),
-            ))
-    if "createpair" in low and ("lambofactory" in low or "createlaunchpad" in low):
-        c = str(rec["contracts"][0] if rec["contracts"] else Path(rel).stem)
-        out.append(mk_finding(
-            title=f"{c}.createLaunchPad - createPair frontrun permanently DoS-es deployment",
-            file=rel, contract=c, function="createLaunchPad",
-            line=line_at(text, "createPair") or line_at(text, "createLaunchPad"),
-            severity="high",
-            mechanism=(
-                "An attacker can pre-create the Uniswap pair for the predicted clone address, causing "
-                "subsequent createPair/createLaunchPad calls to revert."
-            ),
-            impact="Token launches can be permanently blocked for targeted deployments.",
-            description=(
-                f"In `{rel}`, contract `{c}`, the launch path calls `createPair` for a predictable token "
-                "address. A frontrunner can create that pair first and deny all later launch attempts."
-            ),
-        ))
-    return out
-
-
-def detect_loopfi(rec: dict[str, Any]) -> list[dict[str, Any]]:
-    rel, text = str(rec["rel"]), str(rec["text"])
-    out: list[dict[str, Any]] = []
-    c = str(rec["contracts"][0] if rec["contracts"] else Path(rel).stem)
-    if "_updateRewardIndex" in text and "divDown" in text and "totalShares" in text:
-        out.append(mk_finding(
-            title=f"{c}._updateRewardIndex - zero index advance loses accrued rewards",
-            file=rel, contract=c, function="_updateRewardIndex",
-            line=line_at(text, "_updateRewardIndex"), severity="high",
-            mechanism=(
-                "When accrued.divDown(totalShares) is zero the index may not advance while lastBalance "
-                "updates, stranding reward accrual for small-decimal tokens or large share supply."
-            ),
-            impact="Reward tokens accrue but are never credited, causing permanent loss for stakers.",
-            description=(
-                f"In `{rel}`, contract `{c}`, function `_updateRewardIndex()`, frequent updates with tiny "
-                "accrued amounts can fail to move the reward index, silently discarding emissions."
-            ),
-        ))
-    if "liquidatePositionBadDebt" in text and "repayCreditAccount" in text:
-        out.append(mk_finding(
-            title=f"{c}.liquidatePositionBadDebt - profit and loss mishandled in bad-debt liquidation",
-            file=rel, contract=c, function="liquidatePositionBadDebt",
-            line=line_at(text, "liquidatePositionBadDebt"), severity="high",
-            mechanism=(
-                "Bad-debt liquidation passes inconsistent profit/loss values into repayCreditAccount, "
-                "so interest and principal settlement diverge from actual vault accounting."
-            ),
-            impact="LP stakers absorb incorrect losses or miss recoveries during bad-debt events.",
-            description=(
-                f"In `{rel}`, contract `{c}`, function `liquidatePositionBadDebt()`, the liquidation path "
-                "forwards mismatched profit and loss figures to the credit pool repayment routine, breaking "
-                "accounting for lpETH stakers."
-            ),
-        ))
-    return out
-
-
-def detect_bakerfi(rec: dict[str, Any]) -> list[dict[str, Any]]:
-    rel, text = str(rec["rel"]), str(rec["text"])
-    out: list[dict[str, Any]] = []
-    c = str(rec["contracts"][0] if rec["contracts"] else Path(rel).stem)
-    if "StrategySupply" in text and re.search(r"\bfunction\s+harvest\b", text):
-        if "onlyOwner" not in text[text.find("harvest") : text.find("harvest") + 400]:
-            out.append(mk_finding(
-                title=f"{c}.harvest - permissionless harvest lets users skip performance fees",
-                file=rel, contract=c, function="harvest",
-                line=line_at(text, "function harvest"), severity="high",
-                mechanism=(
-                    "Anyone can call harvest to realize interest before rebalance collects performance fees."
-                ),
-                impact="Users retain interest that should be partially taken as protocol fees.",
-                description=(
-                    f"In `{rel}`, contract `{c}`, function `harvest()`, the harvest entrypoint is callable "
-                    "without restricted access, enabling front-running of fee collection."
-                ),
-            ))
-    if "undeploy" in text and "_deployedAmount" in text:
-        if not re.search(r"_deployedAmount\s*[-]=", text):
-            out.append(mk_finding(
-                title=f"{c}.undeploy - _deployedAmount not reduced on withdrawal",
-                file=rel, contract=c, function="undeploy",
-                line=line_at(text, "function undeploy"), severity="high",
-                mechanism=(
-                    "Withdrawals undeploy assets but leave _deployedAmount unchanged, so later rebalance "
-                    "cannot assess performance fees on remaining interest."
-                ),
-                impact="Protocol performance fees are permanently lost after partial withdrawals.",
-                description=(
-                    f"In `{rel}`, contract `{c}`, function `undeploy()`, the internal deployed principal "
-                    "tracker is not decremented when assets are withdrawn."
-                ),
-            ))
-    if "StrategySupplyERC4626" in text and "_getBalance" in text:
-        out.append(mk_finding(
-            title=f"{c}._getBalance - returns share count instead of underlying asset balance",
-            file=rel, contract=c, function="_getBalance",
-            line=line_at(text, "_getBalance"), severity="high",
-            mechanism=(
-                "Balance helpers return ERC4626 share amounts rather than converted underlying assets, "
-                "skewing vault share pricing."
-            ),
-            impact="Depositors can mint or redeem vault shares at incorrect asset valuations.",
-            description=(
-                f"In `{rel}`, contract `{c}`, function `_getBalance()`, share units are reported as if "
-                "they were underlying token amounts when computing strategy balances."
-            ),
-        ))
-    return out
-
-
-def run_patterns(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    hits: list[dict[str, Any]] = []
-    for rec in rows:
-        for fn in (detect_stableswap, detect_vesting, detect_lambowin, detect_loopfi, detect_bakerfi):
-            hits.extend(fn(rec))
-    return hits
-
-
 def triage(api: str | None, rows: list[dict[str, Any]]) -> tuple[list[str], list[dict[str, Any]]]:
     prompt = (
-        "Review this repository map. Pick files most likely to hold real high/critical exploitable bugs. "
-        'Return strict JSON: {"target_files":["path.sol"],"findings":[{"title":"Contract.function - bug",'
+        "Review this compact smart-contract repository map. Pick the files most likely to "
+        "contain real high/critical exploitable bugs. Return strict JSON only:\n"
+        '{"target_files":["path.sol"],"findings":[{"title":"Contract.function - bug",'
         '"file":"path.sol","contract":"Contract","function":"fn","severity":"high|critical",'
         '"mechanism":"precondition -> action -> effect","impact":"fund loss or privilege",'
         '"description":"2-4 precise sentences"}]}\n'
-        "Prioritize: stableswap invariant breaks, LP accounting, vesting marketplace order bugs, "
-        "VirtualToken cashIn minting, factory pair frontrun, reward index drift, bad-debt liquidation "
-        "accounting, and permissionless harvest/fee bypass. Be precise; no invented symbols.\n\n"
+        "Prioritize access control gaps, unsafe external calls, broken accounting or oracle "
+        "logic, initialization/upgrade flaws, and reentrancy or slippage issues. "
+        "Prefer precision over volume. Do not invent files or functions.\n\n"
         + digest(rows)
     )
     try:
@@ -616,22 +327,23 @@ def triage(api: str | None, rows: list[dict[str, Any]]) -> tuple[list[str], list
 
 def batch_prompt(batch: list[dict[str, Any]], by_name: dict[str, dict[str, Any]]) -> str:
     hdr = (
-        "Deep-audit the sources below. Return strict JSON only:\n"
-        '{"findings":[{"title":"Contract.function - bug","file":"exact/path",'
+        "Deep-audit the Solidity/Vyper sources below. Find only high/critical vulnerabilities "
+        "with a concrete exploit path. Return strict JSON only:\n"
+        '{"findings":[{"title":"Contract.function - specific bug","file":"exact/path",'
         '"contract":"Name","function":"fn","line":123,"severity":"high|critical",'
         '"mechanism":"pre -> attack -> broken invariant","impact":"specific harm",'
-        '"description":"2-4 sentences with file, contract, function, mechanism, impact"}]}\n'
-        "Checklist: stableswap swaps/LP/fees/slippage, vesting listing/purchase math, "
-        "VirtualToken cashIn, factory pair DoS, reward index updates, bad-debt liquidation, "
-        "strategy harvest/undeploy accounting. Max 5 findings. Omit weak issues.\n"
+        '"description":"2-4 sentences naming file, contract, function, mechanism, impact"}]}\n'
+        "Check access control, external calls, token/oracle math, LP/share accounting, "
+        "initialization paths, and state-update ordering. At most 5 findings. "
+        "Omit weak or speculative issues.\n"
     )
     parts, room = [hdr], BATCH_CAP - len(hdr)
     for rec in batch:
         rel = rec["rel"]
-        block = f"\n\n===== {rel} =====\nContracts: {', '.join(rec['contracts'][:8])}\n{rec['text']}\n"
+        block = f"\n\n===== FILE: {rel} =====\nContracts: {', '.join(rec['contracts'][:8])}\n{rec['text']}\n"
         rel_txt = related(rec, by_name)
         if rel_txt:
-            block += f"\n===== IMPORTS for {rel} =====\n{rel_txt}\n"
+            block += f"\n===== RELATED for {rel} =====\n{rel_txt}\n"
         if len(block) > room:
             block = block[: max(0, room)] + "\n/* truncated */\n"
         if room <= 0:
@@ -776,21 +488,14 @@ def agent_main(project_dir: str | None = None, inference_api: str | None = None)
     rel_map = {r["rel"]: r for r in rows}
     by_name = {Path(r["rel"]).name: r for r in rows}
 
-    raw: list[dict[str, Any]] = list(run_patterns(rows))
-    if len(raw) >= EARLY_EXIT:
-        shaped = [shape(x, rel_map) for x in raw]
-        return {"vulnerabilities": dedupe([s for s in shaped if s is not None])}
-
-    calls = 0
+    raw: list[dict[str, Any]] = []
     targets, triaged = triage(inference_api, rows)
     raw.extend(triaged)
-    calls += 1
-    first, second = pick_batches(targets, rows)
 
-    if calls < CALL_CAP and time.monotonic() - t0 < WALL:
+    first, second = pick_batches(targets, rows)
+    if time.monotonic() - t0 < WALL:
         raw.extend(deep_audit(inference_api, first, by_name))
-        calls += 1
-    if calls < CALL_CAP and time.monotonic() - t0 < WALL:
+    if time.monotonic() - t0 < WALL:
         raw.extend(deep_audit(inference_api, second, by_name))
 
     shaped = [shape(x, rel_map) for x in raw]
