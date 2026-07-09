@@ -1,0 +1,10 @@
+{
+  "schema_version": 2,
+  "subnet_pack": "sn60__bitsec",
+  "mode": "miner",
+  "submission_id": "jimcody1995-20260708-01",
+  "created_at": "2026-07-08T02:30:00+00:00",
+  "author": "jimcody1995",
+  "title": "Heuristic-first triage miner with extended pattern library",
+  "notes": "King-style 3-call flow plus static detectors for stableswap, vesting, lambowin, loopfi, and bakerfi families."
+}
