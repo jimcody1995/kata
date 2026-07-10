@@ -136,12 +136,18 @@ def run_sn60_screening(
     output_root: str,
     sandbox_source: Sn60SandboxSource,
     execution_hook: Sn60ScreeningHook | None = None,
+    run_static_checks: bool = True,
+    require_findings: bool = True,
 ) -> Sn60ScreeningResult:
     """Static + execution screening for a single project (runs the agent once).
 
     Retained as a self-contained building block; the resident challenge flow uses
     :func:`run_sn60_static_screening` before the duel and reuses the duel's own
     reports afterwards instead of executing the agent a second time.
+
+    ``require_findings=False`` is used for the optional SN60-style screener
+    project gate: that gate proves the agent executes and returns valid report
+    JSON, but the real finding score still comes only from the round projects.
     """
     artifact_root = Path(candidate_artifact_path).expanduser().resolve()
     output_base = Path(output_root).expanduser().resolve()
@@ -150,7 +156,9 @@ def run_sn60_screening(
     run_root.mkdir(parents=True, exist_ok=False)
 
     artifact_hash = hash_bundle_root(artifact_root)
-    static_reasons = validate_sn60_static_screening(artifact_root)
+    static_reasons = (
+        validate_sn60_static_screening(artifact_root) if run_static_checks else []
+    )
     if static_reasons:
         result = build_screening_result(
             run_id=run_id,
@@ -193,7 +201,10 @@ def run_sn60_screening(
             "error": f"SN60 screening execution failed before report creation: {exc}",
         }
     write_json(Path(context.report_path), report_payload)
-    execution_reasons = validate_sn60_screening_report(report_payload)
+    execution_reasons = validate_sn60_screening_report(
+        report_payload,
+        require_findings=require_findings,
+    )
     result = build_screening_result(
         run_id=run_id,
         status=(
@@ -211,6 +222,7 @@ def run_sn60_screening(
         details={
             "execution_report_success": bool(report_payload.get("success")),
             "execution_timeout_seconds": timeout_seconds,
+            "require_findings": require_findings,
         },
         sandbox_source=sandbox_source,
     )
@@ -238,7 +250,11 @@ def resolve_sn60_screening_execution_timeout_seconds() -> float:
     return DEFAULT_SN60_SCREENING_EXECUTION_TIMEOUT_SECONDS
 
 
-def validate_sn60_screening_report(report_payload: dict[str, object]) -> list[str]:
+def validate_sn60_screening_report(
+    report_payload: dict[str, object],
+    *,
+    require_findings: bool = True,
+) -> list[str]:
     reasons: list[str] = []
     if not report_payload.get("success"):
         reasons.append(
@@ -253,7 +269,7 @@ def validate_sn60_screening_report(report_payload: dict[str, object]) -> list[st
     if not isinstance(vulnerabilities, list):
         reasons.append("SN60 screening report must contain a top-level `vulnerabilities` list.")
         return dedupe(reasons)
-    if not vulnerabilities:
+    if not vulnerabilities and require_findings:
         reasons.append(
             "SN60 screening report must include at least one candidate vulnerability. "
             "Empty reports are treated as no-op submissions."

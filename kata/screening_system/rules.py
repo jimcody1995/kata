@@ -243,26 +243,11 @@ def screen_bundle_static_policy(bundle_files: dict[str, str]) -> list[ScreeningF
                 )
             )
     findings.extend(screen_bundle_miner_contract(parsed_trees))
-    findings.extend(screen_bundle_sampling_policy(parsed_trees))
     return findings
 
 
 def screen_sn60_static_bundle(bundle_files: dict[str, str]) -> list[ScreeningFinding]:
     findings: list[ScreeningFinding] = []
-    helper_paths = [
-        relative_path
-        for relative_path in sorted(bundle_files)
-        if Path(relative_path).parts and Path(relative_path).parts[0] == "helpers"
-    ]
-    if helper_paths:
-        findings.append(
-            reject_finding(
-                "sn60.helper_files",
-                "SN60 miner submissions do not support helper files in V1: "
-                + ", ".join(helper_paths),
-            )
-        )
-
     for relative_path, content in sorted(bundle_files.items()):
         if not relative_path.endswith(".py"):
             continue

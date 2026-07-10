@@ -206,7 +206,7 @@ def test_validate_submission_rejects_required_agent_main_args(tmp_path, monkeypa
     assert any("no-argument invocation" in reason for reason in reasons)
 
 
-def test_validate_submission_rejects_helper_files(tmp_path, monkeypatch) -> None:
+def test_validate_submission_allows_helper_files(tmp_path, monkeypatch) -> None:
     _, repo_root, submission_root = make_miner_submission(tmp_path, monkeypatch)
     helpers = submission_root / "helpers"
     helpers.mkdir()
@@ -214,7 +214,8 @@ def test_validate_submission_rejects_helper_files(tmp_path, monkeypatch) -> None
 
     result = validate_submission(str(submission_root), repo_root=str(repo_root))
 
-    assert any("do not support helper files in V1" in reason for reason in result.reasons)
+    assert result.is_valid
+    assert not any("do not support helper files in V1" in reason for reason in result.reasons)
 
 
 def test_validate_submission_rejects_non_bitsec_report_contract(tmp_path, monkeypatch) -> None:
@@ -276,7 +277,9 @@ def test_validate_submission_rejects_hardcoded_secret(tmp_path, monkeypatch) -> 
     assert any("hardcoded secret" in reason for reason in reasons)
 
 
-def test_validate_submission_rejects_sampling_override(tmp_path, monkeypatch) -> None:
+def test_validate_submission_allows_sampling_override_source(
+    tmp_path, monkeypatch
+) -> None:
     reasons = validation_reasons(
         tmp_path,
         monkeypatch,
@@ -286,10 +289,10 @@ def test_validate_submission_rejects_sampling_override(tmp_path, monkeypatch) ->
             "    return {\"vulnerabilities\": []}\n"
         ),
     )
-    assert any("sampling parameters" in reason for reason in reasons)
+    assert not any("sampling parameters" in reason for reason in reasons)
 
 
-def test_validate_submission_rejects_dict_unpack_sampling_override(
+def test_validate_submission_allows_dict_unpack_sampling_override_source(
     tmp_path, monkeypatch
 ) -> None:
     reasons = validation_reasons(
@@ -301,7 +304,7 @@ def test_validate_submission_rejects_dict_unpack_sampling_override(
             "    return {\"vulnerabilities\": []}\n"
         ),
     )
-    assert any("temperature" in reason for reason in reasons)
+    assert not any("temperature" in reason for reason in reasons)
 
 
 def test_validate_submission_rejects_provider_endpoint(tmp_path, monkeypatch) -> None:

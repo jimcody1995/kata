@@ -281,6 +281,7 @@ def relay_and_upstream(monkeypatch):
     # Default the budget off so it doesn't interfere with non-budget tests; the
     # budget tests set their own limits explicitly.
     monkeypatch.setenv("KATA_RELAY_AGENT_CALL_BUDGET", "0")
+    monkeypatch.setenv("KATA_RELAY_AGENT_INPUT_TOKEN_BUDGET", "0")
     monkeypatch.setenv("KATA_RELAY_AGENT_TOKEN_BUDGET", "0")
     upstream = ThreadingHTTPServer(("127.0.0.1", 0), _RecordingUpstream)
     upstream.records = []  # type: ignore[attr-defined]
@@ -363,6 +364,7 @@ def test_inference_budget_refuses_agent_after_call_limit(relay_and_upstream, mon
     base, upstream = relay_and_upstream
     AGENT_BUDGET.reset()
     monkeypatch.setenv("KATA_RELAY_AGENT_CALL_BUDGET", "2")
+    monkeypatch.setenv("KATA_RELAY_AGENT_INPUT_TOKEN_BUDGET", "0")
     monkeypatch.setenv("KATA_RELAY_AGENT_TOKEN_BUDGET", "0")  # isolate the call-count cap
     body = json.dumps({"messages": [{"role": "user", "content": "x"}]}).encode()
 
@@ -379,12 +381,36 @@ def test_inference_budget_refuses_agent_after_call_limit(relay_and_upstream, mon
     AGENT_BUDGET.reset()
 
 
+def test_inference_budget_refuses_agent_after_input_token_limit(
+    relay_and_upstream, monkeypatch
+) -> None:
+    base, upstream = relay_and_upstream
+    AGENT_BUDGET.reset()
+    monkeypatch.setenv("KATA_RELAY_AGENT_CALL_BUDGET", "0")
+    monkeypatch.setenv("KATA_RELAY_AGENT_INPUT_TOKEN_BUDGET", "200")
+    monkeypatch.setenv("KATA_RELAY_AGENT_TOKEN_BUDGET", "0")
+    body = json.dumps({"messages": [{"role": "user", "content": "x"}]}).encode()
+
+    for _ in range(2):
+        status, _, _ = _post(base + "/j/AAA/inference", body)
+        assert status == 200
+
+    seen = len(upstream.records)
+    with pytest.raises(HTTPError) as excinfo:
+        _post(base + "/j/AAA/inference", body)
+    assert excinfo.value.code == 429
+    assert "input-token budget" in excinfo.value.read().decode()
+    assert len(upstream.records) == seen
+    AGENT_BUDGET.reset()
+
+
 def test_inference_budget_is_per_problem_token_not_global(relay_and_upstream, monkeypatch) -> None:
     # The bug this guards against: a shared source address made the budget cap the
     # whole round. Keying on the per-problem token, each problem gets its own budget.
     base, upstream = relay_and_upstream
     AGENT_BUDGET.reset()
     monkeypatch.setenv("KATA_RELAY_AGENT_CALL_BUDGET", "2")
+    monkeypatch.setenv("KATA_RELAY_AGENT_INPUT_TOKEN_BUDGET", "0")
     monkeypatch.setenv("KATA_RELAY_AGENT_TOKEN_BUDGET", "0")
     body = json.dumps({"messages": [{"role": "user", "content": "x"}]}).encode()
 
@@ -415,6 +441,7 @@ def test_inference_budget_survives_interleaved_problem_tokens(
     base, upstream = relay_and_upstream
     AGENT_BUDGET.reset()
     monkeypatch.setenv("KATA_RELAY_AGENT_CALL_BUDGET", "2")
+    monkeypatch.setenv("KATA_RELAY_AGENT_INPUT_TOKEN_BUDGET", "0")
     monkeypatch.setenv("KATA_RELAY_AGENT_TOKEN_BUDGET", "0")
     body = json.dumps({"messages": [{"role": "user", "content": "x"}]}).encode()
 

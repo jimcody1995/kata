@@ -19,10 +19,14 @@ LLM_CODEX_BIN_ENV = "KATA_SCREENING_LLM_CODEX_BIN"
 LLM_TIMEOUT_ENV = "KATA_SCREENING_LLM_TIMEOUT_SECONDS"
 LLM_ARTIFACT_DIR_ENV = "KATA_SCREENING_LLM_ARTIFACT_DIR"
 LLM_BENCHMARK_FILE_ENV = "KATA_SCREENING_LLM_BENCHMARK_FILE"
+SN60_SANDBOX_ROOT_ENV = "KATA_SN60_SANDBOX_ROOT"
 SN60_BENCHMARK_FILE_ENV = "KATA_SN60_BENCHMARK_FILE"
+DEFAULT_SN60_BENCHMARK_FILENAME = "curated-highs-only-2025-08-08.json"
 DEFAULT_LLM_MODEL = "gpt-5.4"
 DEFAULT_LLM_TIMEOUT_SECONDS = 180
-DEFAULT_LLM_BENCHMARK_FILE = Path("/srv/kata-benchmark") / "curated-highs-only-2025-08-08.json"
+DEFAULT_LLM_BENCHMARK_FILE = (
+    Path("/srv/sandbox") / "validator" / DEFAULT_SN60_BENCHMARK_FILENAME
+)
 MAX_LLM_SOURCE_CHARS_PER_FILE = 24_000
 MAX_LLM_TOTAL_SOURCE_CHARS = 48_000
 MAX_LLM_BENCHMARK_CONTEXT_CHARS = 22_000
@@ -334,6 +338,15 @@ def resolve_llm_benchmark_file() -> Path | None:
         raw = os.environ.get(env_name, "").strip()
         if raw:
             return Path(raw).expanduser().resolve()
+    sandbox_root = os.environ.get(SN60_SANDBOX_ROOT_ENV, "").strip()
+    if sandbox_root:
+        sandbox_benchmark = (
+            Path(sandbox_root).expanduser().resolve()
+            / "validator"
+            / DEFAULT_SN60_BENCHMARK_FILENAME
+        )
+        if sandbox_benchmark.exists():
+            return sandbox_benchmark
     if DEFAULT_LLM_BENCHMARK_FILE.exists():
         return DEFAULT_LLM_BENCHMARK_FILE.resolve()
     return None

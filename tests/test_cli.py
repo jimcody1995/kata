@@ -16,7 +16,22 @@ def test_top_level_cli_exposes_agent_competition_commands() -> None:
     )
     commands = set(subparser_action.choices)
 
-    assert {"king", "submission", "lane", "round"} == commands
+    assert {"king", "submission", "lane", "round", "sn60-baseline"} == commands
+
+
+def test_sn60_baseline_cli_is_separate_from_round_mode() -> None:
+    parser = build_parser()
+    subparser_action = next(
+        action for action in parser._actions if getattr(action, "choices", None)
+    )
+    baseline_parser = subparser_action.choices["sn60-baseline"]
+    option_dests = {
+        action.dest for action in baseline_parser._actions if action.option_strings
+    }
+
+    assert "candidate" in option_dests
+    assert "king_path" not in option_dests
+    assert "candidate_only" not in option_dests
 
 
 def test_lane_cli_registers_and_lists_packs(tmp_path: Path, capsys) -> None:

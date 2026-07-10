@@ -1,6 +1,6 @@
 # SN60 Miner Submission Checklist
 
-This is the contributor contract for the live Kata lane:
+This is the contributor contract for the current Kata competition:
 
 ```text
 sn60__bitsec / miner
@@ -8,7 +8,7 @@ sn60__bitsec / miner
 
 Use this checklist before opening a PR. The goal is simple: submit one honest,
 general vulnerability-finding agent that can be scored fairly against the current
-king. Do not edit validator, sandbox, lane, or king code in a miner PR.
+king. Do not edit engine, benchmark, workflow, or king code in a miner PR.
 
 ## Quick Checklist
 
@@ -26,7 +26,8 @@ Your PR is ready when all of these are true:
 - `agent_main()` can be called with no arguments.
 - `agent_main` returns a dict with top-level `vulnerabilities`.
 - The agent does real analysis. It is not an empty stub or canned constant report.
-- The bundle has no helper files, symlinks, hardcoded secrets, provider URLs, or
+- Optional Python helper files live under `helpers/` only.
+- The bundle has no symlinks, hardcoded secrets, provider URLs, or
   benchmark-answer replay logic.
 - The bundle passes local validation:
 
@@ -95,6 +96,9 @@ Requirements:
   as a fake agent.
 - A real agent that analyzes the project but happens to find nothing during a
   run is not closed; that project simply scores 0.
+- If the round-start smoke test is enabled, your agent must
+  run successfully and return valid JSON with a top-level `vulnerabilities` list.
+  The smoke test does not require a finding and does not count toward your score.
 
 ### `agent_manifest.json`
 
@@ -135,7 +139,7 @@ Requirements:
 
 ## Model Access
 
-Miners do not bring API keys. The validator provides a sandbox inference proxy
+Miners do not bring API keys. Kata provides a sandbox inference proxy
 and pins the model for every agent.
 
 Use this contract:
@@ -149,7 +153,9 @@ Use this contract:
   `{"messages": [...], "max_tokens": 4000}`
 - Response: read `choices[0].message.content`
 - Do not use `Authorization: Bearer`
-- Do not set `model`, `temperature`, `top_p`, `seed`, or other sampling knobs
+- You may include normal request fields, but the relay ignores/strips `model`,
+  `temperature`, `top_p`, `top_k`, `seed`, and similar sampling knobs.
+  Do not rely on them for behavior.
 
 Current validation inference uses the pinned Qwen model:
 
@@ -160,7 +166,9 @@ qwen/qwen3.6-35b-a3b
 Per problem, the relay enforces:
 
 - up to 3 successful model calls
+- up to 150,000 input tokens total
 - up to 24,000 output tokens total
+- each call is capped at 32,000 output tokens
 - further calls return HTTP `429`
 
 Handle failures and `429` by returning the findings you already have. Do not
@@ -213,10 +221,10 @@ clear hard failure:
 - `agent.py` has invalid Python syntax.
 - `agent_main` is missing, async, or cannot be called with no arguments.
 - The agent is a no-op stub or constant canned report.
-- The bundle contains unsupported files, helper files, symlinks, too many files,
-  or oversized files.
+- The bundle contains unsupported files, symlinks, too many files, or oversized
+  files. Python helpers are allowed only under `helpers/`.
 - The bundle contains hardcoded API keys, provider endpoints, or direct
-  references to provider/validator secret env vars such as `OPENAI_API_KEY`,
+  references to provider/scoring secret env vars such as `OPENAI_API_KEY`,
   `OPENROUTER_API_KEY`, `CHUTES_API_KEY`, or `KATA_VALIDATOR_API_KEY`.
 - The bundle includes benchmark-answer leakage tokens such as
   `expected_findings`, `ground_truth`, `answer_key`, `scabench`, or `hardsteer`.
@@ -239,30 +247,27 @@ Examples:
 - Suspicious static report banks.
 - Optional LLM review evidence that supports manual review.
 
-Maintainer commands:
-
-```text
-/kata approve  # approve review, remove kata:review, add kata:pending
-/kata review   # re-run screening/LLM review and post the result
-/kata close    # close the PR
-```
-
-Approval removes `kata:review` and adds `kata:pending` only if the latest code
-still passes all hard rejection checks. A maintainer cannot approve concrete
-cheating, invalid identity, invalid PR shape, or benchmark-answer replay.
+If your PR is held for review, either wait for project review or push a clean update
+that removes the suspicious behavior. Concrete cheating, invalid identity, invalid
+PR shape, or benchmark-answer replay cannot enter a round.
 
 ## What Happens In A Round
 
 Opening a PR does not score it immediately. After intake, a passing PR waits as
-`kata:pending` until a maintainer starts a round.
+`kata:pending` until the next round starts.
 
 In each round:
 
 - Kata snapshots open candidate PRs at their current commits.
 - Only one open PR per contributor is allowed.
-- Each candidate is re-screened on the locked commit.
+- The current commit must match the commit that passed intake screening.
+- If enabled, each candidate runs one real executable smoke test before scoring.
+  This checks that the agent runs and returns a valid `vulnerabilities` report.
+  It does not require a true-positive finding.
 - The king and all candidates are scored on the same randomly sampled SN60
   benchmark problems.
+- In SN60-compatible production mode, each selected project runs 3 times and a
+  project passes only if at least 2 of 3 runs return PASS.
 - A bad, empty, slow, or crashed result on one problem scores 0 for that problem.
   It does not close the PR by itself.
 - The top candidate that strictly beats the king is merged and promoted.
@@ -272,24 +277,25 @@ In each round:
 
 Promotion comparison order:
 
-1. Higher detection score.
-2. More true positives.
-3. Higher precision.
-4. Higher F1 score.
-5. Fewer invalid/error evaluations.
+1. Higher SN60 pass score: passed projects / selected projects.
+2. More passed projects.
+3. More true positives.
+4. Fewer invalid/error evaluations.
+5. Higher precision.
+6. Higher F1 score.
 
 ## Labels You May See
 
 - `kata:pending`: screened and waiting for the next round.
-- `kata:review`: held for maintainer review; cannot enter a round yet.
+- `kata:review`: held for review; cannot enter a round yet.
 - `kata:executing`: currently competing in a round.
-- `kata:winner:<pack>`: merged and promoted to king.
+- `kata:winner:<target>`: merged and promoted to king.
 - `kata:reward:*`: Gittensor reward tier for a merged winner.
 - `kata:losing`: competed but did not beat the king.
 - `kata:invalid`: failed screening or one-open-PR rule.
 - `kata:stale`: skipped because the PR commit and king were unchanged since the
   last time it competed.
-- `kata:hold`: won, but merge/promotion needs maintainer attention.
+- `kata:hold`: won, but merge/promotion needs attention.
 
 ## Local Commands
 
@@ -312,21 +318,4 @@ uv run kata submission validate \
 
 Then commit only that submission directory and open one PR.
 
-If a local checkout reports this error:
-
-```text
-No evaluator-backed lane is registered in the pack registry for `sn60__bitsec/miner`.
-```
-
-run the command with `KATA_ROOT` set to the repository root:
-
-```bash
-KATA_ROOT="$(pwd)" uv run kata submission init \
-  --subnet-pack sn60__bitsec \
-  --mode miner \
-  --submission-id <github-user>-YYYYMMDD-01 \
-  --author <github-user>
-```
-
-Use this from the top-level Kata repository directory, where `lanes/registry.json`
-exists.
+Run these commands from the top-level Kata repository directory.

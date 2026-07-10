@@ -63,18 +63,16 @@ DEFAULT_MAX_OUTPUT_TOKENS = 32000
 
 # Per-agent inference budget. The validator funds every token, and candidates
 # submit arbitrary agents, so each agent run gets a hard cap: once it exhausts
-# its output-token OR call budget for the current problem it is refused further
-# inference and must finalize with what it found. This bounds cost per agent and
-# blocks a greedy/looping agent from draining the validator's funds. Runs are
-# serial (one agent container at a time), so the budget window is keyed by the
-# calling container's address and reset whenever a new container starts calling.
-# 0 disables a limit. Override with KATA_RELAY_AGENT_TOKEN_BUDGET / _CALL_BUDGET.
+# its input-token, output-token, OR call budget for the current problem it is
+# refused further inference and must finalize with what it found.
 # Per-agent budget, keyed per problem via the `/j/<token>/inference` path Kata
 # sets (see AgentBudget). Each agent may make up to CALL_BUDGET successful model
-# calls per problem, and at most TOKEN_BUDGET output tokens across them, whichever
-# is reached first (further calls -> HTTP 429). Failed calls are not counted, so a
-# transient failure can be retried. Individual calls are also clamped to
+# calls per problem, at most INPUT_TOKEN_BUDGET input tokens, and at most
+# TOKEN_BUDGET output tokens, whichever is reached first (further calls -> HTTP
+# 429). Failed calls are not counted, so a transient failure can be retried.
+# Individual calls are also clamped to
 # KATA_RELAY_MAX_OUTPUT_TOKENS.
+DEFAULT_AGENT_INPUT_TOKEN_BUDGET = 150000
 DEFAULT_AGENT_TOKEN_BUDGET = 24000
 DEFAULT_AGENT_CALL_BUDGET = 3
 
@@ -291,6 +289,14 @@ def resolve_agent_token_budget() -> int:
     return _resolve_budget("KATA_RELAY_AGENT_TOKEN_BUDGET", DEFAULT_AGENT_TOKEN_BUDGET)
 
 
+def resolve_agent_input_token_budget() -> int:
+    """Max input tokens one agent may spend per problem (0 = unlimited)."""
+    return _resolve_budget(
+        "KATA_RELAY_AGENT_INPUT_TOKEN_BUDGET",
+        DEFAULT_AGENT_INPUT_TOKEN_BUDGET,
+    )
+
+
 def resolve_agent_call_budget() -> int:
     """Max inference calls one agent may make per problem (0 = unlimited)."""
     return _resolve_budget("KATA_RELAY_AGENT_CALL_BUDGET", DEFAULT_AGENT_CALL_BUDGET)
@@ -435,10 +441,11 @@ class AgentBudget:
     the inference URL (``/j/<token>/inference``).
 
     Each key -- one agent working one problem -- accrues its own call count and
-    output-token total independently, so problems scored *concurrently* (each with
-    a distinct token) never disturb one another's budget. Keying on the token (not
-    the network source) is what makes this correct even though every agent reaches
-    the relay from the same gateway address.
+    input-token and output-token totals independently, so problems scored
+    *concurrently* (each with a distinct token) never disturb one another's
+    budget. Keying on the token (not the network source) is what makes this
+    correct even though every agent reaches the relay from the same gateway
+    address.
 
     The budget is a *cap*, never a quota: the relay only ever counts and refuses the
     agent's own calls, it never issues one. An agent that calls the model once is
@@ -458,7 +465,7 @@ class AgentBudget:
     def _bucket(self, key: str) -> dict[str, int]:
         bucket = self._by_key.get(key)
         if bucket is None:
-            bucket = {"tokens": 0, "calls": 0}
+            bucket = {"input_tokens": 0, "tokens": 0, "calls": 0}
             self._by_key[key] = bucket
             while len(self._by_key) > self.MAX_TRACKED_KEYS:
                 self._by_key.popitem(last=False)
@@ -468,16 +475,22 @@ class AgentBudget:
         with self._lock:
             bucket = self._bucket(key)
             max_calls = resolve_agent_call_budget()
+            max_input_tokens = resolve_agent_input_token_budget()
             max_tokens = resolve_agent_token_budget()
             if max_calls and bucket["calls"] >= max_calls:
                 return False, f"inference call budget ({max_calls}) exhausted for this problem"
+            if max_input_tokens and bucket["input_tokens"] >= max_input_tokens:
+                return False, (
+                    f"input-token budget ({max_input_tokens}) exhausted for this problem"
+                )
             if max_tokens and bucket["tokens"] >= max_tokens:
                 return False, f"output-token budget ({max_tokens}) exhausted for this problem"
             return True, None
 
-    def record(self, key: str, output_tokens: int) -> None:
+    def record(self, key: str, input_tokens: int, output_tokens: int) -> None:
         with self._lock:
             bucket = self._bucket(key)
+            bucket["input_tokens"] += input_tokens
             bucket["tokens"] += output_tokens
             bucket["calls"] += 1
 
@@ -655,9 +668,9 @@ class ModelPinningRelayHandler(BaseHTTPRequestHandler):
             with urlopen(request, timeout=resolve_timeout()) as response:
                 response_body = response.read()
                 if is_inference and 200 <= response.status < 300:
-                    _, output_tokens, _ = extract_usage(response_body)
+                    input_tokens, output_tokens, _ = extract_usage(response_body)
                     self._meter(response_body)
-                    AGENT_BUDGET.record(budget_key, output_tokens)
+                    AGENT_BUDGET.record(budget_key, input_tokens, output_tokens)
                 self._relay_response(response.status, response.headers.items(), response_body)
         except HTTPError as error:
             # Upstream returned a real HTTP error (4xx/5xx); pass it through verbatim.

@@ -5,11 +5,13 @@ from pathlib import Path
 
 from kata.evaluators.sn60_bitsec import Sn60ReplicaContext, resolve_sn60_sandbox_source
 from kata.screening_system import screen_submission
+from kata.screening_system.llm_review import resolve_llm_benchmark_file
 from kata.screening_system.models import ScreeningFinding
 from kata.validator_system.screening import (
     SN60_SCREENING_STAGE_EXECUTION,
     SN60_SCREENING_STAGE_STATIC,
     run_sn60_screening,
+    validate_sn60_screening_report,
     validate_sn60_static_screening,
 )
 
@@ -90,7 +92,18 @@ def write_replay_benchmark(root: Path) -> Path:
     return benchmark_path
 
 
-def test_validate_sn60_static_screening_rejects_helper_files_and_leak_tokens(
+def test_resolve_llm_benchmark_file_uses_sandbox_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    benchmark_path = write_sandbox_source(tmp_path / "sandbox")
+    monkeypatch.delenv("KATA_SCREENING_LLM_BENCHMARK_FILE", raising=False)
+    monkeypatch.delenv("KATA_SN60_BENCHMARK_FILE", raising=False)
+    monkeypatch.setenv("KATA_SN60_SANDBOX_ROOT", str(tmp_path / "sandbox"))
+
+    assert resolve_llm_benchmark_file() == benchmark_path.resolve()
+
+
+def test_validate_sn60_static_screening_allows_helper_files_but_rejects_leak_tokens(
     tmp_path: Path,
 ) -> None:
     bundle_root = tmp_path / "candidate"
@@ -103,7 +116,7 @@ def test_validate_sn60_static_screening_rejects_helper_files_and_leak_tokens(
 
     reasons = validate_sn60_static_screening(bundle_root)
 
-    assert any("do not support helper files in V1" in reason for reason in reasons)
+    assert not any("do not support helper files in V1" in reason for reason in reasons)
     assert any("benchmark-answer leakage token" in reason for reason in reasons)
 
 
@@ -129,7 +142,6 @@ def test_screen_submission_wraps_current_static_screening(tmp_path: Path) -> Non
     assert decision.rejection_messages() == validate_sn60_static_screening(bundle_root)
     assert {finding.rule_id for finding in decision.reject_reasons} == {
         "sn60.answer_key_token",
-        "sn60.helper_files",
     }
 
 
@@ -632,6 +644,15 @@ def test_run_sn60_screening_rejects_empty_execution_report(tmp_path: Path) -> No
     assert not result.passed
     assert result.stage == SN60_SCREENING_STAGE_EXECUTION
     assert any("at least one candidate vulnerability" in reason for reason in result.reasons)
+
+
+def test_validate_sn60_screening_report_allows_empty_report_for_execution_gate() -> None:
+    reasons = validate_sn60_screening_report(
+        {"success": True, "report": {"vulnerabilities": []}},
+        require_findings=False,
+    )
+
+    assert reasons == []
 
 
 def test_run_sn60_screening_rejects_thin_finding_description(tmp_path: Path) -> None:
