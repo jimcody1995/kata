@@ -74,7 +74,8 @@ Validation checks the candidate bundle before any expensive sandbox work:
 - `agent.py` defines a valid synchronous `agent_main`
 - Python sources compile
 - the target competition exists and is active
-- the bundle uses the supported small bundle layout and stays within size limits
+- the bundle uses the supported small bundle layout and stays within size
+  limits: max 16 files, max 64 KiB per file, max 128 KiB total
 - obvious secret leakage and benchmark-answer leakage are rejected
 - model/sampling fields are handled by the relay at runtime, not rejected just
   because they appear in source

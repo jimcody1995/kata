@@ -27,8 +27,10 @@ from kata.submission_system.bundle import (
 from kata.util import dedupe
 
 MAX_SUBMISSION_BUNDLE_FILES = 16
-MAX_SUBMISSION_FILE_BYTES = 64 * 1024
-MAX_SUBMISSION_BUNDLE_BYTES = 128 * 1024
+MAX_SUBMISSION_FILE_KIB = 64
+MAX_SUBMISSION_BUNDLE_KIB = 128
+MAX_SUBMISSION_FILE_BYTES = MAX_SUBMISSION_FILE_KIB * 1024
+MAX_SUBMISSION_BUNDLE_BYTES = MAX_SUBMISSION_BUNDLE_KIB * 1024
 
 BENCHMARK_LEAK_TOKENS = (
     "curated-highs-only",
@@ -92,6 +94,12 @@ SECRET_PATTERN = re.compile(
 AGENT_MAIN_PATTERN = re.compile(r"(?m)^(?:async\s+)?def\s+agent_main\s*\(")
 
 
+def format_size_limit(byte_count: int) -> str:
+    if byte_count % 1024 == 0:
+        return f"{byte_count // 1024} KiB ({byte_count} bytes)"
+    return f"{byte_count} bytes"
+
+
 def screen_submission_bundle_files(submission_root: Path) -> list[ScreeningFinding]:
     findings: list[ScreeningFinding] = []
     unexpected_paths = find_unexpected_bundle_paths(submission_root)
@@ -133,7 +141,8 @@ def screen_submission_bundle_files(submission_root: Path) -> list[ScreeningFindi
                 reject_finding(
                     "bundle.file_size",
                     f"Submission bundle file is too large: {relative_path} "
-                    f"({file_bytes} bytes; limit is {MAX_SUBMISSION_FILE_BYTES}).",
+                    f"({file_bytes} bytes; limit is "
+                    f"{format_size_limit(MAX_SUBMISSION_FILE_BYTES)}).",
                     path=relative_path,
                 )
             )
@@ -142,7 +151,8 @@ def screen_submission_bundle_files(submission_root: Path) -> list[ScreeningFindi
             reject_finding(
                 "bundle.total_size",
                 "Submission bundle total size is too large. "
-                f"Found {total_bytes} bytes; limit is {MAX_SUBMISSION_BUNDLE_BYTES}.",
+                f"Found {total_bytes} bytes; limit is "
+                f"{format_size_limit(MAX_SUBMISSION_BUNDLE_BYTES)}.",
             )
         )
     return findings

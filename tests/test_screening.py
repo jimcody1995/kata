@@ -7,6 +7,11 @@ from kata.evaluators.sn60_bitsec import Sn60ReplicaContext, resolve_sn60_sandbox
 from kata.screening_system import screen_submission
 from kata.screening_system.llm_review import resolve_llm_benchmark_file
 from kata.screening_system.models import ScreeningFinding
+from kata.screening_system.rules import (
+    MAX_SUBMISSION_BUNDLE_BYTES,
+    MAX_SUBMISSION_FILE_BYTES,
+    screen_submission_bundle_files,
+)
 from kata.validator_system.screening import (
     SN60_SCREENING_STAGE_EXECUTION,
     SN60_SCREENING_STAGE_STATIC,
@@ -90,6 +95,41 @@ def write_replay_benchmark(root: Path) -> Path:
         encoding="utf-8",
     )
     return benchmark_path
+
+
+def test_screening_enforces_sn60_file_size_limit(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "candidate"
+    bundle_root.mkdir()
+    (bundle_root / "agent.py").write_text(
+        "x" * (MAX_SUBMISSION_FILE_BYTES + 1),
+        encoding="utf-8",
+    )
+
+    findings = screen_submission_bundle_files(bundle_root)
+
+    assert [finding.rule_id for finding in findings] == ["bundle.file_size"]
+    assert "64 KiB" in findings[0].reason
+
+
+def test_screening_enforces_sn60_total_bundle_size_limit(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "candidate"
+    helpers_root = bundle_root / "helpers"
+    helpers_root.mkdir(parents=True)
+    (bundle_root / "agent.py").write_text(
+        "x" * MAX_SUBMISSION_FILE_BYTES,
+        encoding="utf-8",
+    )
+    (helpers_root / "planner.py").write_text(
+        "y" * MAX_SUBMISSION_FILE_BYTES,
+        encoding="utf-8",
+    )
+    (helpers_root / "extra.py").write_text("z", encoding="utf-8")
+
+    findings = screen_submission_bundle_files(bundle_root)
+
+    assert [finding.rule_id for finding in findings] == ["bundle.total_size"]
+    assert "128 KiB" in findings[0].reason
+    assert str(MAX_SUBMISSION_BUNDLE_BYTES) in findings[0].reason
 
 
 def test_resolve_llm_benchmark_file_uses_sandbox_root(

@@ -27,6 +27,8 @@ Your PR is ready when all of these are true:
 - `agent_main` returns a dict with top-level `vulnerabilities`.
 - The agent does real analysis. It is not an empty stub or canned constant report.
 - Optional Python helper files live under `helpers/` only.
+- Bundle size stays within the candidate limits: max 16 files, max 64 KiB per
+  file, and max 128 KiB total.
 - The bundle has no symlinks, hardcoded secrets, provider URLs, or
   benchmark-answer replay logic.
 - The bundle passes local validation:
@@ -222,7 +224,8 @@ clear hard failure:
 - `agent_main` is missing, async, or cannot be called with no arguments.
 - The agent is a no-op stub or constant canned report.
 - The bundle contains unsupported files, symlinks, too many files, or oversized
-  files. Python helpers are allowed only under `helpers/`.
+  files. Current candidate limits are max 16 files, max 64 KiB per file, and
+  max 128 KiB total. Python helpers are allowed only under `helpers/`.
 - The bundle contains hardcoded API keys, provider endpoints, or direct
   references to provider/scoring secret env vars such as `OPENAI_API_KEY`,
   `OPENROUTER_API_KEY`, `CHUTES_API_KEY`, or `KATA_VALIDATOR_API_KEY`.
