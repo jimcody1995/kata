@@ -487,6 +487,126 @@ def test_screen_submission_allows_generic_reusable_detector(tmp_path: Path) -> N
     assert decision.score == 0
 
 
+def test_screen_submission_reviews_factory_call_report_bank(tmp_path: Path) -> None:
+    # A report bank routed through a `_make_finding(...)` factory call instead of
+    # inline dict literals must still be flagged (the factory form is a trivial
+    # evasion of dict-literal-only detection).
+    bundle_root = tmp_path / "candidate"
+    agent_source = (
+        "def _make_finding(*, title, description, severity, file, function):\n"
+        "    return {'title': title, 'description': description, "
+        "'severity': severity, 'file': file, 'function': function}\n"
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        "    low = str(project_dir or '').lower()\n"
+        "    out = []\n"
+        "    if 'onlyowner' in low:\n"
+        "        out.append(_make_finding(title='Issue A', description=%r, "
+        "severity='high', file='A.sol', function='f'))\n"
+        "    if 'transferfrom' in low:\n"
+        "        out.append(_make_finding(title='Issue B', description=%r, "
+        "severity='high', file='B.sol', function='g'))\n"
+        "    if 'delegatecall' in low:\n"
+        "        out.append(_make_finding(title='Issue C', description=%r, "
+        "severity='high', file='C.sol', function='h'))\n"
+        "    return {'vulnerabilities': out}\n"
+    ) % (SCREENING_DESCRIPTION, SCREENING_DESCRIPTION, SCREENING_DESCRIPTION)
+    write_bundle(bundle_root, agent_source)
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+        enable_review=True,
+        strict_replay=True,
+    )
+
+    assert decision.status == "review"
+    assert decision.reject_reasons == []
+    assert any(
+        finding.rule_id == "benchmark_replay.static_report_bank"
+        for finding in decision.review_reasons
+    )
+
+
+def test_screen_submission_rejects_source_line_probe_bank_in_strict_mode(
+    tmp_path: Path,
+) -> None:
+    # Gating findings on exact, verbatim source lines (`_line_for(text, "<line>")`)
+    # is a benchmark-specific answer bank and must be rejected under strict replay.
+    bundle_root = tmp_path / "candidate"
+    agent_source = (
+        "def _line_for(text, needle):\n"
+        "    idx = text.find(needle)\n"
+        "    return None if idx < 0 else text.count(chr(10), 0, idx) + 1\n"
+        "def _make_finding(*, title, description, severity, file, function, line):\n"
+        "    return {'title': title, 'description': description, "
+        "'severity': severity, 'file': file, 'function': function, 'line': line}\n"
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        "    text = str(project_dir or '')\n"
+        "    out = []\n"
+        "    out.append(_make_finding(title='A', description=%r, severity='high', "
+        "file='A.sol', function='f', line=_line_for(text, "
+        "'grantorVesting.releaseRate = grantorVesting.totalAmount / numOfSteps;')))\n"
+        "    out.append(_make_finding(title='B', description=%r, severity='high', "
+        "file='B.sol', function='g', line=_line_for(text, "
+        "'_createVesting(_beneficiary, _amount, grantorVesting.stepsClaimed, true);')))\n"
+        "    out.append(_make_finding(title='C', description=%r, severity='high', "
+        "file='C.sol', function='h', line=_line_for(text, "
+        "'uint256 accrued = IERC20(tokens[i]).balanceOf(vault) - lastBalance;')))\n"
+        "    return {'vulnerabilities': out}\n"
+    ) % (SCREENING_DESCRIPTION, SCREENING_DESCRIPTION, SCREENING_DESCRIPTION)
+    write_bundle(bundle_root, agent_source)
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+        strict_replay=True,
+    )
+
+    assert decision.status == "reject"
+    assert not decision.passed
+    assert any(
+        "hardcoded benchmark replay" in message
+        for message in decision.rejection_messages()
+    )
+
+
+def test_screen_submission_allows_short_keyword_substring_probes(
+    tmp_path: Path,
+) -> None:
+    # Short keyword substring checks are the bread and butter of legitimate
+    # generic detectors and must never count as verbatim source-line probes.
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "def _scan(source):\n"
+        "    return (\n"
+        "        '.call(' in source,\n"
+        "        'delegatecall' in source,\n"
+        "        'tx.origin' in source,\n"
+        "        'selfdestruct' in source,\n"
+        "    )\n"
+        + VALID_AGENT_SOURCE,
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        changed_paths=[],
+        repo_root=tmp_path,
+        public_root=None,
+        mode="miner",
+        strict_replay=True,
+    )
+
+    assert decision.status == "pass"
+    assert decision.review_reasons == []
+
+
 def test_validate_sn60_static_screening_rejects_async_agent_main(
     tmp_path: Path,
 ) -> None:

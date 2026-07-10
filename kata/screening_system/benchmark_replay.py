@@ -32,6 +32,7 @@ CONCRETE_REPLAY_RULE_IDS = frozenset(
         "benchmark_replay.finding_id",
         "benchmark_replay.title_text",
         "benchmark_replay.long_answer_text",
+        "benchmark_replay.source_line_probe",
     }
 )
 MIN_LONG_ANSWER_WORDS = 24
@@ -39,6 +40,39 @@ PROJECT_FINGERPRINT_BRANCH_THRESHOLD = 3
 EARLY_RETURN_FINGERPRINT_THRESHOLD = 2
 STATIC_REPORT_BANK_MIN_FINDINGS = 3
 STATIC_REPORT_BANK_MIN_TEXT_CHARS = 1000
+
+# A "source-line probe" is a long, verbatim, code-like string literal that the
+# agent matches against project source (via `in`, str.find/index/..., or a
+# helper such as `_line_for(text, "<literal>")`). No honest analyzer hardcodes
+# the exact source line it is looking for, so a cluster of these is a reliable
+# tell of a benchmark-specific answer bank -- and, unlike known-answer-text
+# hashing, it survives paraphrasing and routing findings through a factory call.
+SOURCE_LINE_PROBE_MIN_CHARS = 35
+SOURCE_LINE_PROBE_MIN_COUNT = 3
+# Exact-substring string methods (regex methods are intentionally excluded --
+# fuzzy structural regexes are a weaker, separate signal and prone to false
+# positives against legitimate generic detectors).
+EXACT_MATCH_STR_METHODS = frozenset(
+    {"find", "index", "rfind", "count", "startswith", "endswith"}
+)
+REGEX_CALL_ATTRS = frozenset(
+    {"search", "match", "fullmatch", "findall", "finditer", "sub", "subn", "split", "compile"}
+)
+# Identifier immediately followed by a call/member/index operator -- the shape
+# of real source code, as opposed to a natural-language sentence.
+SOURCE_LINE_CALL_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*[\(.\[]")
+# Regex metacharacter sequences used to exclude regex-pattern literals (which
+# are a legitimate way to match code structurally) from the exact-line signal.
+REGEX_METACHAR_PATTERN = re.compile(
+    r"\\[sSdDwWbBAZ]"
+    r"|\(\?:"
+    r"|\(\?P<"
+    r"|\[\^"
+    r"|\[[A-Za-z0-9]-[A-Za-z0-9]"
+    r"|\.\*|\.\+"
+    r"|\{\d+,\d*\}"
+    r"|\\[.(){}\[\]|+*?]"
+)
 FINGERPRINT_STOP_WORDS = {
     "account",
     "accounts",
@@ -234,6 +268,7 @@ def find_ambiguous_replay_review_signals(
     findings: list[ScreeningFinding] = []
     for relative_path, content in python_sources(bundle_files):
         findings.extend(find_static_report_bank(relative_path, content))
+        findings.extend(find_hardcoded_source_line_probes(relative_path, content))
         findings.extend(find_project_fingerprint_branches(relative_path, content, signatures))
     return findings
 
@@ -243,19 +278,24 @@ def find_static_report_bank(relative_path: str, content: str) -> list[ScreeningF
         tree = ast.parse(content, filename=relative_path)
     except SyntaxError:
         return []
-    vuln_dicts: list[ast.Dict] = []
+    # Count hardcoded findings whether they are inline dict literals or routed
+    # through a factory call such as `_make_finding(title="...", ...)`. Matching
+    # only `ast.Dict` literals is trivially evaded by the factory-call form.
+    hardcoded_findings: list[ast.AST] = []
     report_text_chars = 0
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Dict) or not is_vulnerability_like_dict(node):
-            continue
-        vuln_dicts.append(node)
-        report_text_chars += vulnerability_dict_text_chars(node)
+        if isinstance(node, ast.Dict) and is_vulnerability_like_dict(node):
+            hardcoded_findings.append(node)
+            report_text_chars += vulnerability_dict_text_chars(node)
+        elif isinstance(node, ast.Call) and finding_shaped_constant_call(node):
+            hardcoded_findings.append(node)
+            report_text_chars += finding_call_text_chars(node)
     if (
-        len(vuln_dicts) < STATIC_REPORT_BANK_MIN_FINDINGS
+        len(hardcoded_findings) < STATIC_REPORT_BANK_MIN_FINDINGS
         and report_text_chars < STATIC_REPORT_BANK_MIN_TEXT_CHARS
     ):
         return []
-    first = vuln_dicts[0]
+    first = hardcoded_findings[0]
     return [
         ScreeningFinding(
             rule_id="benchmark_replay.static_report_bank",
@@ -267,11 +307,138 @@ def find_static_report_bank(relative_path: str, content: str) -> list[ScreeningF
                 "manual review is required to confirm it is not benchmark replay."
             ),
             evidence=(
-                f"vulnerability_dicts={len(vuln_dicts)}; "
+                f"hardcoded_findings={len(hardcoded_findings)}; "
                 f"text_chars={report_text_chars}; points=4"
             ),
         )
     ]
+
+
+def finding_shaped_constant_call(node: ast.Call) -> bool:
+    """A call that builds a finding (>=2 vulnerability-key kwargs) with at least
+    one hardcoded string title/description -- i.e. a prewritten finding, not one
+    assembled from analysis of the project."""
+    keyword_names = {keyword.arg for keyword in node.keywords if keyword.arg}
+    if len(keyword_names & VULNERABILITY_KEYS) < 2:
+        return False
+    return any(
+        keyword.arg in {"title", "description"}
+        and isinstance(keyword.value, ast.Constant)
+        and isinstance(keyword.value.value, str)
+        for keyword in node.keywords
+    )
+
+
+def finding_call_text_chars(node: ast.Call) -> int:
+    total = 0
+    for keyword in node.keywords:
+        if (
+            keyword.arg in {"title", "description"}
+            and isinstance(keyword.value, ast.Constant)
+            and isinstance(keyword.value.value, str)
+        ):
+            total += len(keyword.value.value)
+    return total
+
+
+def find_hardcoded_source_line_probes(
+    relative_path: str, content: str
+) -> list[ScreeningFinding]:
+    try:
+        tree = ast.parse(content, filename=relative_path)
+    except SyntaxError:
+        return []
+    probes: list[tuple[int | None, str]] = []
+    seen_literals: set[str] = set()
+    for node in ast.walk(tree):
+        for literal, line in source_line_probe_sites(node):
+            key = literal.strip()
+            if key in seen_literals:
+                continue
+            seen_literals.add(key)
+            probes.append((line, literal))
+    if len(probes) < SOURCE_LINE_PROBE_MIN_COUNT:
+        return []
+    first_line = next((line for line, _ in probes if line is not None), None)
+    sample = probes[0][1].strip()
+    return [
+        ScreeningFinding(
+            rule_id="benchmark_replay.source_line_probe",
+            severity="review",
+            path=relative_path,
+            line=first_line,
+            reason=(
+                "SN60 screening found hardcoded verbatim source-line probes: the "
+                "agent gates output on exact known source lines instead of "
+                "analyzing the project, which is a benchmark-specific answer bank."
+            ),
+            evidence=f"source_line_probes={len(probes)}; sample={sample[:80]!r}; points=6",
+        )
+    ]
+
+
+def source_line_probe_sites(node: ast.AST):
+    """Yield (literal, line) for each site where a long, code-like literal is
+    matched against a variable by exact substring: `"<lit>" in x`,
+    `x.find("<lit>")`, or `helper(x, "<lit>")` (e.g. `_line_for`)."""
+    if isinstance(node, ast.Compare) and any(
+        isinstance(op, (ast.In, ast.NotIn)) for op in node.ops
+    ):
+        left = node.left
+        if (
+            isinstance(left, ast.Constant)
+            and isinstance(left.value, str)
+            and looks_like_source_line_literal(left.value)
+        ):
+            yield left.value, getattr(node, "lineno", None)
+        return
+    if not isinstance(node, ast.Call):
+        return
+    func = node.func
+    if isinstance(func, ast.Attribute) and func.attr in EXACT_MATCH_STR_METHODS:
+        for arg in node.args:
+            if (
+                isinstance(arg, ast.Constant)
+                and isinstance(arg.value, str)
+                and looks_like_source_line_literal(arg.value)
+            ):
+                yield arg.value, getattr(node, "lineno", None)
+        return
+    if is_regex_call(func):
+        return
+    # A generic call that pairs a source-text variable with a verbatim source
+    # literal -- the shape of a `_line_for(text, "<exact line>")` locator.
+    if not any(isinstance(arg, (ast.Name, ast.Attribute, ast.Subscript)) for arg in node.args):
+        return
+    for arg in node.args:
+        if (
+            isinstance(arg, ast.Constant)
+            and isinstance(arg.value, str)
+            and looks_like_source_line_literal(arg.value)
+        ):
+            yield arg.value, getattr(node, "lineno", None)
+
+
+def is_regex_call(func: ast.AST) -> bool:
+    if isinstance(func, ast.Attribute):
+        if isinstance(func.value, ast.Name) and func.value.id == "re":
+            return True
+        if func.attr in REGEX_CALL_ATTRS:
+            return True
+    if isinstance(func, ast.Name) and func.id in {"search", "match", "fullmatch", "compile", "sub"}:
+        return True
+    return False
+
+
+def looks_like_source_line_literal(value: str) -> bool:
+    text = value.strip()
+    if len(text) < SOURCE_LINE_PROBE_MIN_CHARS:
+        return False
+    if REGEX_METACHAR_PATTERN.search(text):
+        return False
+    if not SOURCE_LINE_CALL_PATTERN.search(text):
+        return False
+    return any(character in text for character in "();={}")
 
 
 def find_project_fingerprint_branches(
