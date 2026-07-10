@@ -108,7 +108,7 @@ def test_screening_enforces_sn60_file_size_limit(tmp_path: Path) -> None:
     findings = screen_submission_bundle_files(bundle_root)
 
     assert [finding.rule_id for finding in findings] == ["bundle.file_size"]
-    assert "64 KiB" in findings[0].reason
+    assert "128 KiB" in findings[0].reason
 
 
 def test_screening_enforces_sn60_total_bundle_size_limit(tmp_path: Path) -> None:
@@ -128,7 +128,7 @@ def test_screening_enforces_sn60_total_bundle_size_limit(tmp_path: Path) -> None
     findings = screen_submission_bundle_files(bundle_root)
 
     assert [finding.rule_id for finding in findings] == ["bundle.total_size"]
-    assert "128 KiB" in findings[0].reason
+    assert "256 KiB" in findings[0].reason
     assert str(MAX_SUBMISSION_BUNDLE_BYTES) in findings[0].reason
 
 
