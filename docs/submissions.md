@@ -263,6 +263,8 @@ In each round:
 - Each candidate is re-screened on the locked commit.
 - The king and all candidates are scored on the same randomly sampled SN60
   benchmark problems.
+- In SN60-compatible production mode, each selected project runs 3 times and a
+  project passes only if at least 2 of 3 runs return PASS.
 - A bad, empty, slow, or crashed result on one problem scores 0 for that problem.
   It does not close the PR by itself.
 - The top candidate that strictly beats the king is merged and promoted.
@@ -272,11 +274,12 @@ In each round:
 
 Promotion comparison order:
 
-1. Higher detection score.
-2. More true positives.
-3. Higher precision.
-4. Higher F1 score.
-5. Fewer invalid/error evaluations.
+1. Higher SN60 pass score: passed projects / selected projects.
+2. More passed projects.
+3. More true positives.
+4. Fewer invalid/error evaluations.
+5. Higher precision.
+6. Higher F1 score.
 
 ## Labels You May See
 

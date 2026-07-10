@@ -123,7 +123,11 @@ def test_run_sn60_challenge_decides_winner_and_records_lane_provenance(
 
     assert summary.mode == "miner"
     assert summary.promotion_ready
-    assert summary.primary.variant_scores == {"king": 25.0, "candidate": 100.0}
+    assert summary.primary.variant_scores == {"king": 0.0, "candidate": 100.0}
+    assert summary.primary.variant_detection_scores == {
+        "king": 25.0,
+        "candidate": 100.0,
+    }
     assert summary.primary.variant_successes == {"king": 0, "candidate": 1}
     assert summary.primary.total_task_weight == 1.0
     assert summary.primary.candidate_beats_king
@@ -362,7 +366,7 @@ def test_evaluate_sn60_promotion_uses_invalid_runs_as_last_tiebreaker() -> None:
     assert decision.reason == "candidate did not beat the current SN60 king"
 
 
-def test_evaluate_sn60_promotion_does_not_use_pass_count_as_score_tiebreaker() -> None:
+def test_evaluate_sn60_promotion_uses_pass_count_before_true_positives() -> None:
     king = build_variant(
         "king",
         aggregated_score=0.5,
@@ -378,8 +382,8 @@ def test_evaluate_sn60_promotion_does_not_use_pass_count_as_score_tiebreaker() -
 
     decision = evaluate_sn60_promotion(king=king, candidate=candidate)
 
-    assert not decision.promotion_ready
-    assert decision.final_winner == "king"
+    assert decision.promotion_ready
+    assert decision.final_winner == "candidate"
 
 
 def test_evaluate_sn60_promotion_uses_true_positives_as_final_tiebreaker() -> None:

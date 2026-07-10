@@ -128,17 +128,20 @@ A round scores the king against **all** qualified candidates on the **same** pro
 - **One sampled problem set per round.** The round samples the round's problems once
   (secret-seeded); every candidate faces that identical set, so results are directly
   comparable. Different rounds sample different problems, which prevents overfitting.
-- Each selected project runs once per replica by default, matching the SN60 job-run style.
+- In SN60-compatible production mode, each selected project runs 3 times. A project
+  passes only if at least 2 of 3 runs return PASS.
 - Scoring is **resilient** — every selected project is scored, and a bad or invalid result
   on one project (scored 0 for that project) does not abort the rest.
 - The sandbox returns SN60 metrics for each project: true positives, total expected,
   detection rate, precision, F1, and PASS/FAIL.
-- Each candidate's per-project scores are summarized, and candidates are ranked by the
-  promotion comparator below.
+- Each candidate's per-project scores are summarized, and candidates are ranked by
+  SN60 pass/fail score first. Detection rate remains visible as a diagnostic metric.
 
 Sampling configuration (set on the validator):
 
-- `KATA_SN60_PROJECT_SAMPLE_SIZE` — how many problems each round samples (MVP: 6).
+- `KATA_SN60_PROJECT_SAMPLE_SIZE` — how many problems each round samples. Recent
+  SN60 v3 rounds use 7 scoring projects, so production should use `7` unless the
+  active Bitsec project set changes.
 - `KATA_SN60_PROJECT_SAMPLE_SECRET` — required when the sample size is smaller than the
   full benchmark; keeps the per-round problem set private until results.
 - `KATA_SN60_PROJECT_KEYS` — an explicit override; normally left unset for production.
@@ -149,9 +152,10 @@ Example MVP settings:
 
 ```bash
 KATA_SN60_PROJECT_KEYS=
-KATA_SN60_PROJECT_SAMPLE_SIZE=6
+KATA_SN60_PROJECT_SAMPLE_SIZE=7
 KATA_SN60_PROJECT_SAMPLE_SECRET=<private-validator-secret>
-KATA_SN60_REPLICAS_PER_PROJECT=1
+KATA_SN60_REPLICAS_PER_PROJECT=3
+KATA_SN60_VALIDATOR_REPLICA_COUNT=1
 ```
 
 ### 4. Promotion Gate
@@ -164,17 +168,21 @@ A candidate promotes only if all conditions pass:
 
 The rank comparator is:
 
-1. detection score
-2. true positives
-3. precision
-4. F1 score
-5. fewer invalid/error evaluations
+1. SN60 pass score: passed projects / selected projects
+2. codebase pass count
+3. true positives
+4. fewer invalid/error evaluations
+5. precision
+6. F1 score
 
 Same score and same tie-breakers are not enough; the candidate must strictly
 beat the current king.
 
-Detection score follows the SN60 scorer signal:
-`total_true_positives / total_expected_vulnerabilities`.
+SN60 pass score follows the Bitsec leaderboard style: a project only counts as
+passed when all expected high/critical findings are found reliably. With
+`KATA_SN60_REPLICAS_PER_PROJECT=3`, Kata uses the 2-of-3 project pass rule.
+Detection score is still recorded as `total_true_positives / total_expected_vulnerabilities`
+for diagnostics and public proof.
 
 Metric meanings:
 
@@ -187,7 +195,7 @@ Metric meanings:
   tie-breaks.
 
 Sandbox `PASS` still means a project run found all expected vulnerabilities.
-PASS project count is useful context, but it is not the primary promotion score.
+Passed project count is the primary promotion score.
 
 ## Round Outcomes
 

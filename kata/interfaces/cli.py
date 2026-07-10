@@ -37,9 +37,11 @@ from kata.submission_system import (
 )
 from kata.validator_system import (
     load_challenge_summary,
+    project_pass_threshold_label,
     render_challenge_summary,
     resolve_sn60_project_keys,
     run_sn60_round,
+    sn60_pass_score,
 )
 
 
@@ -552,6 +554,11 @@ def handle_round(args: argparse.Namespace) -> int:
         progress_path=args.round_progress_path,
         candidate_only=args.candidate_only,
     )
+    runs_per_project = getattr(
+        result,
+        "replicas_per_project",
+        args.sn60_replicas_per_project or DEFAULT_REPLICAS_PER_PROJECT,
+    )
     if args.json:
         print_json(
             {
@@ -565,6 +572,9 @@ def handle_round(args: argparse.Namespace) -> int:
                 "promotion_reason": result.promotion_reason,
                 "competition_mode": getattr(result, "competition_mode", "king_duel"),
                 "king_skipped_reason": getattr(result, "king_skipped_reason", None),
+                "validator_replica_count": 1,
+                "runs_per_project": runs_per_project,
+                "project_pass_threshold": project_pass_threshold_label(runs_per_project),
                 "king": _sn60_variant_detail(result.king) if result.king else None,
                 "entries": [
                     {
@@ -588,6 +598,8 @@ def _sn60_variant_detail(variant) -> dict:  # type: ignore[no-untyped-def]
     breakdown so the dashboard can render a detailed per-PR duel view."""
     return {
         "aggregated_score": variant.aggregated_score,
+        "detection_score": variant.aggregated_score,
+        "sn60_pass_score": sn60_pass_score(variant),
         "average_detection_rate": variant.average_detection_rate,
         "true_positives": variant.true_positives,
         "total_expected": variant.total_expected,
@@ -623,8 +635,10 @@ def render_round_result(result) -> str:  # type: ignore[no-untyped-def]
             lines.append(f"reason: {king_skipped_reason}")
     elif result.king is not None:
         lines.append(
-            f"king detection {result.king.aggregated_score:.3f} "
-            f"(tp {result.king.true_positives}/{result.king.total_expected})"
+            f"king pass score {sn60_pass_score(result.king):.3f} "
+            f"({result.king.codebase_pass_count}/{len(result.king.project_summaries)} projects, "
+            f"detection {result.king.aggregated_score:.3f}, "
+            f"tp {result.king.true_positives}/{result.king.total_expected})"
         )
     lines.append("ranking (best first):")
     for position, entry in enumerate(result.entries, start=1):
@@ -636,8 +650,10 @@ def render_round_result(result) -> str:  # type: ignore[no-untyped-def]
             marker = "-"
         lines.append(
             f"  {position}. {entry.submission_id} "
-            f"detection {entry.candidate.aggregated_score:.3f} "
-            f"(tp {entry.candidate.true_positives}) {marker}"
+            f"pass {sn60_pass_score(entry.candidate):.3f} "
+            f"({entry.candidate.codebase_pass_count}/{len(entry.candidate.project_summaries)} projects, "
+            f"detection {entry.candidate.aggregated_score:.3f}, "
+            f"tp {entry.candidate.true_positives}) {marker}"
         )
     lines.append(result.promotion_reason)
     return "\n".join(lines)

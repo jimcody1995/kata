@@ -65,6 +65,7 @@ class ChallengePoolSummary:
     variant_successes: dict[str, int]
     variant_invalid_runs: dict[str, int]
     variant_scores: dict[str, float]
+    variant_detection_scores: dict[str, float]
     candidate_beats_king: bool
     candidate_score_delta: float
     competition_mode: str = "king_duel"
@@ -316,8 +317,10 @@ def sn60_duel_to_pool_summary(
     run_summary_path: Path,
     screening_result: dict[str, object] | None = None,
 ) -> ChallengePoolSummary:
-    king_score = round(duel_summary.king.aggregated_score * 100, 2)
-    candidate_score = round(duel_summary.candidate.aggregated_score * 100, 2)
+    king_score = round(sn60_pass_score(duel_summary.king) * 100, 2)
+    candidate_score = round(sn60_pass_score(duel_summary.candidate) * 100, 2)
+    king_detection = round(duel_summary.king.aggregated_score * 100, 2)
+    candidate_detection = round(duel_summary.candidate.aggregated_score * 100, 2)
     decision = evaluate_sn60_promotion(
         king=duel_summary.king,
         candidate=duel_summary.candidate,
@@ -339,6 +342,10 @@ def sn60_duel_to_pool_summary(
             "king": king_score,
             "candidate": candidate_score,
         },
+        variant_detection_scores={
+            "king": king_detection,
+            "candidate": candidate_detection,
+        },
         candidate_beats_king=decision.final_winner == "candidate",
         candidate_score_delta=round(candidate_score - king_score, 2),
     )
@@ -356,7 +363,8 @@ def sn60_candidate_only_to_challenge_summary(
     lane_id: str,
     reason: str,
 ) -> ChallengeSummary:
-    candidate_score = round(candidate.aggregated_score * 100, 2)
+    candidate_score = round(sn60_pass_score(candidate) * 100, 2)
+    candidate_detection = round(candidate.aggregated_score * 100, 2)
     fingerprint_payload = {
         "competition_mode": "candidate_only",
         "king_artifact_hash": king_artifact_hash,
@@ -400,6 +408,10 @@ def sn60_candidate_only_to_challenge_summary(
             variant_scores={
                 "king": 0.0,
                 "candidate": candidate_score,
+            },
+            variant_detection_scores={
+                "king": 0.0,
+                "candidate": candidate_detection,
             },
             candidate_beats_king=False,
             candidate_score_delta=0.0,
@@ -477,6 +489,7 @@ def build_sn60_screening_failure_summary(
             variant_successes={"king": 0, "candidate": 0},
             variant_invalid_runs={"king": 0, "candidate": 1},
             variant_scores={"king": 0.0, "candidate": 0.0},
+            variant_detection_scores={"king": 0.0, "candidate": 0.0},
             candidate_beats_king=False,
             candidate_score_delta=0.0,
         ),
@@ -513,16 +526,30 @@ def evaluate_sn60_promotion(
     )
 
 
-def sn60_variant_rank(summary: Sn60VariantSummary) -> tuple[float, int, float, float, int]:
-    # SN60-style comparator: detection score first, then true positives and
-    # quality metrics. Project PASS count is reported separately, not used as
-    # the main rank signal.
+def sn60_pass_score(summary: Sn60VariantSummary) -> float:
+    total_projects = len(summary.project_summaries)
+    return summary.codebase_pass_count / total_projects if total_projects else 0.0
+
+
+def project_pass_threshold_label(replicas_per_project: int) -> str:
+    if replicas_per_project <= 0:
+        return "invalid"
+    required = (replicas_per_project * 2 + 2) // 3
+    return f"{required}_of_{replicas_per_project}"
+
+
+def sn60_variant_rank(
+    summary: Sn60VariantSummary,
+) -> tuple[float, int, int, int, float, float]:
+    # SN60-compatible comparator: codebase pass/fail score first. Detection
+    # remains a diagnostic metric, not the promotion score.
     return (
-        round(summary.aggregated_score, 8),
+        round(sn60_pass_score(summary), 8),
+        summary.codebase_pass_count,
         summary.true_positives,
+        -summary.invalid_runs,
         round(summary.precision, 8),
         round(summary.f1_score, 8),
-        -summary.invalid_runs,
     )
 
 
@@ -566,8 +593,14 @@ def build_sn60_round_id() -> str:
 
 def write_sn60_round_summary(path: Path, result: Sn60RoundResult) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    payload = asdict(result)
+    payload["validator_replica_count"] = 1
+    payload["runs_per_project"] = result.replicas_per_project
+    payload["project_pass_threshold"] = project_pass_threshold_label(
+        result.replicas_per_project
+    )
     path.write_text(
-        json.dumps(asdict(result), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 
@@ -578,6 +611,8 @@ def _sn60_variant_progress(summary: Sn60VariantSummary) -> dict[str, object]:
     cached king's — complete duel result the moment it lands."""
     return {
         "aggregated_score": summary.aggregated_score,
+        "detection_score": summary.aggregated_score,
+        "sn60_pass_score": sn60_pass_score(summary),
         "true_positives": summary.true_positives,
         "total_expected": summary.total_expected,
         "total_found": summary.total_found,
@@ -1150,7 +1185,7 @@ def record_sn60_lane_provenance(
             king_artifact_hash=duel_summary.king.artifact_hash,
             screening_result=screening_result,
             selected_project_keys=list(duel_summary.project_keys),
-            validator_replica_count=duel_summary.replicas_per_project,
+            validator_replica_count=1,
             run_ids=[duel_summary.run_id],
             freshness_fingerprint=freshness_fingerprint,
             updated_at=datetime.now(UTC).isoformat(),
@@ -1216,7 +1251,7 @@ def record_sn60_screening_failure_provenance(
             king_artifact_hash=king_hash,
             screening_result=screening_payload,
             selected_project_keys=list(project_keys),
-            validator_replica_count=replicas_per_project,
+            validator_replica_count=1,
             run_ids=[screening.run_id],
             freshness_fingerprint=freshness_fingerprint,
             updated_at=datetime.now(UTC).isoformat(),
@@ -1236,6 +1271,11 @@ def record_sn60_screening_failure_provenance(
                 "sandbox_commit": screening.sandbox_source.sandbox_commit,
                 "benchmark_sha256": screening.sandbox_source.benchmark_sha256,
                 "scorer_version": screening.sandbox_source.scorer_version,
+                "validator_replica_count": 1,
+                "runs_per_project": replicas_per_project,
+                "project_pass_threshold": project_pass_threshold_label(
+                    replicas_per_project
+                ),
             },
             local_replica_scores={"king": [], "candidate": []},
             pass_counts={"king": 0, "candidate": 0},
@@ -1256,10 +1296,22 @@ def sn60_final_metrics(
 ) -> dict[str, object]:
     king_aggregated = duel_summary.king.aggregated_score
     candidate_aggregated = duel_summary.candidate.aggregated_score
+    king_pass_score = sn60_pass_score(duel_summary.king)
+    candidate_pass_score = sn60_pass_score(duel_summary.candidate)
     return {
         "run_id": duel_summary.run_id,
         "promotion_ready": decision.promotion_ready,
         "promotion_reason": decision.reason,
+        "validator_replica_count": 1,
+        "runs_per_project": duel_summary.replicas_per_project,
+        "project_pass_threshold": project_pass_threshold_label(
+            duel_summary.replicas_per_project
+        ),
+        "king_sn60_pass_score": king_pass_score,
+        "candidate_sn60_pass_score": candidate_pass_score,
+        "candidate_sn60_pass_score_delta": candidate_pass_score - king_pass_score,
+        "king_detection_score": king_aggregated,
+        "candidate_detection_score": candidate_aggregated,
         "king_aggregated_score": king_aggregated,
         "candidate_aggregated_score": candidate_aggregated,
         "candidate_aggregated_score_delta": candidate_aggregated - king_aggregated,
@@ -1382,6 +1434,7 @@ def load_challenge_summary(path: str) -> ChallengeSummary:
 
 def parse_challenge_pool(payload: dict[str, object]) -> ChallengePoolSummary:
     variant_scores = payload.get("variant_scores") or {}
+    variant_detection_scores = payload.get("variant_detection_scores") or {}
     candidate_score = float(variant_scores.get("candidate", 0.0)) if variant_scores else 0.0
     king_score = float(variant_scores.get("king", 0.0)) if variant_scores else 0.0
     return ChallengePoolSummary(
@@ -1391,6 +1444,9 @@ def parse_challenge_pool(payload: dict[str, object]) -> ChallengePoolSummary:
         variant_successes=dict(payload.get("variant_successes") or {}),
         variant_invalid_runs=dict(payload.get("variant_invalid_runs") or {}),
         variant_scores={name: float(score) for name, score in variant_scores.items()},
+        variant_detection_scores={
+            name: float(score) for name, score in variant_detection_scores.items()
+        },
         candidate_beats_king=bool(
             payload.get("candidate_beats_king", candidate_score > king_score)
         ),
@@ -1413,7 +1469,15 @@ def render_pool(pool: ChallengePoolSummary) -> list[str]:
         lines.append(
             f"- {variant_name} invalid runs: {pool.variant_invalid_runs.get(variant_name, 0)}"
         )
-        lines.append(f"- {variant_name} score: {pool.variant_scores.get(variant_name, 0.0):.2f}")
+        lines.append(
+            f"- {variant_name} SN60 pass score: "
+            f"{pool.variant_scores.get(variant_name, 0.0):.2f}"
+        )
+        if variant_name in pool.variant_detection_scores:
+            lines.append(
+                f"- {variant_name} detection score: "
+                f"{pool.variant_detection_scores.get(variant_name, 0.0):.2f}"
+            )
     lines.append(f"- Candidate beats king: {'yes' if pool.candidate_beats_king else 'no'}")
     lines.append(f"- Candidate score delta: {pool.candidate_score_delta:+.2f}")
     if pool.competition_mode == "candidate_only":

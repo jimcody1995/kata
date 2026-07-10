@@ -30,8 +30,8 @@ production. Working today:
 - **Isolated, fair execution** — agents run in an internet-blocked sandbox on one fixed
   model, so the king and every challenger are judged identically.
 - **Strict, objective promotion** — a challenger wins only by strictly beating the king on
-  SN60-style metrics: detection score, true positives, precision, F1 score, then fewer
-  invalid/error evaluations.
+  SN60-style project pass score, then passed projects, true positives, invalid/error
+  evaluations, precision, and F1 score.
 - **Anti-spam & fair iteration** — one open PR per contributor; a kept-open PR is re-scored
   next round only if its commit or the king changed, so a promoted king re-enters every
   pending challenger to face the new bar.
