@@ -401,6 +401,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     round_cmd.add_argument(
+        "--king-skipped-reason",
+        default=None,
+        help=(
+            "Optional explanation recorded when --candidate-only skips current "
+            "king evaluation."
+        ),
+    )
+    round_cmd.add_argument(
         "--output-root",
         default=None,
         help="Optional base directory for round artifacts. Defaults to ./runs.",
@@ -553,6 +561,7 @@ def handle_round(args: argparse.Namespace) -> int:
         king_scoreboard_path=args.king_scoreboard,
         progress_path=args.round_progress_path,
         candidate_only=args.candidate_only,
+        king_skipped_reason=args.king_skipped_reason,
     )
     runs_per_project = getattr(
         result,
@@ -651,7 +660,8 @@ def render_round_result(result) -> str:  # type: ignore[no-untyped-def]
         lines.append(
             f"  {position}. {entry.submission_id} "
             f"pass {sn60_pass_score(entry.candidate):.3f} "
-            f"({entry.candidate.codebase_pass_count}/{len(entry.candidate.project_summaries)} projects, "
+            f"({entry.candidate.codebase_pass_count}/"
+            f"{len(entry.candidate.project_summaries)} projects, "
             f"detection {entry.candidate.aggregated_score:.3f}, "
             f"tp {entry.candidate.true_positives}) {marker}"
         )
