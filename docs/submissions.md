@@ -1,6 +1,6 @@
 # SN60 Miner Submission Checklist
 
-This is the contributor contract for the live Kata lane:
+This is the contributor contract for the current Kata competition:
 
 ```text
 sn60__bitsec / miner
@@ -8,7 +8,7 @@ sn60__bitsec / miner
 
 Use this checklist before opening a PR. The goal is simple: submit one honest,
 general vulnerability-finding agent that can be scored fairly against the current
-king. Do not edit validator, sandbox, lane, or king code in a miner PR.
+king. Do not edit engine, benchmark, workflow, or king code in a miner PR.
 
 ## Quick Checklist
 
@@ -96,9 +96,9 @@ Requirements:
   as a fake agent.
 - A real agent that analyzes the project but happens to find nothing during a
   run is not closed; that project simply scores 0.
-- If the validator enables the optional SN60 screener project, your agent must
+- If the round-start smoke test is enabled, your agent must
   run successfully and return valid JSON with a top-level `vulnerabilities` list.
-  The screener does not require a finding and does not count toward your score.
+  The smoke test does not require a finding and does not count toward your score.
 
 ### `agent_manifest.json`
 
@@ -139,7 +139,7 @@ Requirements:
 
 ## Model Access
 
-Miners do not bring API keys. The validator provides a sandbox inference proxy
+Miners do not bring API keys. Kata provides a sandbox inference proxy
 and pins the model for every agent.
 
 Use this contract:
@@ -224,7 +224,7 @@ clear hard failure:
 - The bundle contains unsupported files, symlinks, too many files, or oversized
   files. Python helpers are allowed only under `helpers/`.
 - The bundle contains hardcoded API keys, provider endpoints, or direct
-  references to provider/validator secret env vars such as `OPENAI_API_KEY`,
+  references to provider/scoring secret env vars such as `OPENAI_API_KEY`,
   `OPENROUTER_API_KEY`, `CHUTES_API_KEY`, or `KATA_VALIDATOR_API_KEY`.
 - The bundle includes benchmark-answer leakage tokens such as
   `expected_findings`, `ground_truth`, `answer_key`, `scabench`, or `hardsteer`.
@@ -247,22 +247,14 @@ Examples:
 - Suspicious static report banks.
 - Optional LLM review evidence that supports manual review.
 
-Maintainer commands:
-
-```text
-/kata approve  # approve review, remove kata:review, add kata:pending
-/kata review   # re-run screening/LLM review and post the result
-/kata close    # close the PR
-```
-
-Approval removes `kata:review` and adds `kata:pending` only if the latest code
-still passes all hard rejection checks. A maintainer cannot approve concrete
-cheating, invalid identity, invalid PR shape, or benchmark-answer replay.
+If your PR is held for review, either wait for project review or push a clean update
+that removes the suspicious behavior. Concrete cheating, invalid identity, invalid
+PR shape, or benchmark-answer replay cannot enter a round.
 
 ## What Happens In A Round
 
 Opening a PR does not score it immediately. After intake, a passing PR waits as
-`kata:pending` until a maintainer starts a round.
+`kata:pending` until the next round starts.
 
 In each round:
 
@@ -295,15 +287,15 @@ Promotion comparison order:
 ## Labels You May See
 
 - `kata:pending`: screened and waiting for the next round.
-- `kata:review`: held for maintainer review; cannot enter a round yet.
+- `kata:review`: held for review; cannot enter a round yet.
 - `kata:executing`: currently competing in a round.
-- `kata:winner:<pack>`: merged and promoted to king.
+- `kata:winner:<target>`: merged and promoted to king.
 - `kata:reward:*`: Gittensor reward tier for a merged winner.
 - `kata:losing`: competed but did not beat the king.
 - `kata:invalid`: failed screening or one-open-PR rule.
 - `kata:stale`: skipped because the PR commit and king were unchanged since the
   last time it competed.
-- `kata:hold`: won, but merge/promotion needs maintainer attention.
+- `kata:hold`: won, but merge/promotion needs attention.
 
 ## Local Commands
 
@@ -326,21 +318,4 @@ uv run kata submission validate \
 
 Then commit only that submission directory and open one PR.
 
-If a local checkout reports this error:
-
-```text
-No evaluator-backed lane is registered in the pack registry for `sn60__bitsec/miner`.
-```
-
-run the command with `KATA_ROOT` set to the repository root:
-
-```bash
-KATA_ROOT="$(pwd)" uv run kata submission init \
-  --subnet-pack sn60__bitsec \
-  --mode miner \
-  --submission-id <github-user>-YYYYMMDD-01 \
-  --author <github-user>
-```
-
-Use this from the top-level Kata repository directory, where `lanes/registry.json`
-exists.
+Run these commands from the top-level Kata repository directory.

@@ -17,15 +17,15 @@ mine any supported subnet in one click."
 
 ## Current status — v0.1: the competition engine
 
-**One subnet is live: SN60 (`sn60__bitsec`, miner mode).** It is the only pack
-registered and active in `lanes/registry.json`, and it runs the full loop end-to-end in
+**One subnet target is live: SN60 (`sn60__bitsec`, miner mode).** It is the only target
+registered in Kata, and it runs the full loop end-to-end in
 production. Working today:
 
 - **Round-based competition** — PR open = intake (screen into `kata:pending`,
   `kata:review`, or `kata:invalid`); a
   scheduled round then locks the pending PRs, screens them, scores the **cached** king vs.
   all candidates on the same secretly-sampled problems, ranks them, and promotes the best
-  that beats the king — driven through the pack registry.
+  that beats the king.
 - **A real king** — the current best SN60 agent is always published under `kings/`.
 - **Isolated, fair execution** — agents run in an internet-blocked sandbox on one fixed
   model, so the king and every challenger are judged identically.
@@ -53,13 +53,13 @@ Turn the winning agent into something a miner can actually run.
 - Package and publish the current king so any user can mine SN60 with it directly.
 - A single command to fetch the king and start mining.
 
-### v0.3 — More subnets
+### v0.3 — More targets
 
 Prove the engine is subnet-agnostic in practice, not just in design.
 
-- Add subnets beyond SN60 via the pack registry (new evaluator, new benchmark).
-- Run multiple subnets side by side, each with its own king and isolated state.
-- Per-subnet Gittensor labels so packs score independently.
+- Add subnets beyond SN60 with their own evaluator and benchmark.
+- Run multiple targets side by side, each with its own king and isolated state.
+- Keep contributor rules consistent across targets.
 
 ### v0.4 — Guided mining
 

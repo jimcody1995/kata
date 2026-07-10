@@ -42,7 +42,7 @@ problems — and the entrants are ranked. The best agent that objectively beats 
 merged and becomes the new king. Agent quality becomes a merge decision, not a review
 opinion.
 
-Today Kata runs **one subnet: SN60** (`sn60__bitsec`), a security lane where agents
+Today Kata runs **one subnet target: SN60** (`sn60__bitsec`), where agents
 find critical- and high-severity vulnerabilities in smart-contract code. The long-term
 goal is **one-click mining** — pick any supported subnet and mine it with Kata's
 optimized king agent, no ML expertise required.
@@ -65,7 +65,7 @@ optimized king agent, no ML expertise required.
   on private API access or a bigger budget.
 - **Budgeted inference.** For each problem, the relay allows up to 3 successful
   calls, 150,000 input tokens, and 24,000 output tokens on the pinned Qwen model.
-- **One engine, many subnets.** Adding a new subnet is a pack + registry change, not
+- **One engine, many subnets.** Adding a new subnet target should not require
   an engine rewrite — the same loop produces an optimized king for each.
 
 ---
@@ -76,15 +76,13 @@ Kata is a small set of focused components:
 
 | Component | Role |
 | --- | --- |
-| **kata** | The engine (this repo): pack registry, lane state, screening, the round evaluation (cached king vs. all candidates), ranking, and promotion. |
+| **kata** | The engine (this repo): submission validation, screening, round evaluation (cached king vs. all candidates), ranking, and promotion. |
 | **kata-bot** | GitHub automation: intake (screen PRs into pending, review, or invalid states), the round runner that scores all pending PRs against the king, and the resident service that merges and promotes a round winner. |
-| **kata-board** | Dashboard that reads lane state, the live current round, and the round-history highlights feed. |
-| **sandbox** | Pinned benchmark harness (agent runner + scorer) for the active pack. Isolated and version-locked; never edited by Kata. |
+| **kata-board** | Dashboard that reads current king state, the live current round, and the round-history highlights feed. |
+| **sandbox** | Pinned benchmark harness (agent runner + scorer) for the active competition target. Isolated and version-locked; never edited by Kata. |
 
-**Pack model.** A central registry (`lanes/registry.json`) lists the active packs.
-Each pack keeps isolated state under `lanes/<lane-id>/` and one current king under
-`kings/<pack>/<mode>/`. The engine, bot, and board discover packs only through the
-registry.
+**Target model.** Each supported subnet target has its own benchmark, scoring rules,
+and current king. The public source of truth for the best promoted agent is `kings/`.
 
 **Isolated, fair execution.** Agents run inside an internet-blocked sandbox and reach
 a model only through an endpoint the engine controls. The engine pins every agent to
@@ -112,7 +110,7 @@ a pending entrant; a round scores every pending entrant at once.
 **When you open or update a PR (intake):**
 
 1. **Submit.** A contributor opens a PR that adds exactly one agent bundle under
-   `submissions/<pack>/<mode>/<submission-id>/`. Each contributor may have only **one open
+   `submissions/sn60__bitsec/miner/<submission-id>/`. Each contributor may have only **one open
    PR** at a time; extra open PRs are closed. The submission id must start with
    the PR author's exact GitHub username, e.g. `<github-username>-YYYYMMDD-NN`.
 2. **Intake.** `kata-bot` screens the PR (shape + cheap static anti-cheat) and labels it
@@ -128,7 +126,7 @@ a pending entrant; a round scores every pending entrant at once.
    the qualified ones `kata:executing`.
 4. **Score.** The round samples the round's problems (secret-seeded), scores the **cached**
    king and every candidate on that *same* set — the king is not re-run once cached — and
-   ranks them by the active pack's rules. For SN60: **project pass score**, **passed
+   ranks them by the active target's rules. For SN60: **project pass score**, **passed
    project count**, **true positives**, fewer invalid/error evaluations, **precision**,
    then **F1 score**. Production uses 3 replicas per selected project, so a project
    passes when at least 2 of 3 runs return PASS.
@@ -138,8 +136,8 @@ a pending entrant; a round scores every pending entrant at once.
 6. **Verify freshness.** Before merging, the winner is re-checked against the current king
    and the pinned benchmark snapshot; a stale or unmergeable winner is held (`kata:hold`)
    rather than merged into a broken state.
-7. **Promote.** The verified winner is merged, labeled `kata:winner:<pack>`, published as
-   the new king under `kings/`, and recorded in the lane state. `kings/` is the public
+7. **Promote.** The verified winner is merged, labeled `kata:winner:<target>`, published as
+   the new king under `kings/`. `kings/` is the public
    source of truth for the current best agent.
 
 ---
@@ -149,10 +147,10 @@ a pending entrant; a round scores every pending entrant at once.
 You only ever edit `submissions/`. A submission is a small bundle:
 
 ```text
-submissions/<pack>/<mode>/<submission-id>/
+submissions/sn60__bitsec/miner/<submission-id>/
   agent.py            # your entrypoint: def agent_main(...) -> {"vulnerabilities": [...]}
   agent_manifest.json # bundle contract (schema_version, runtime, entrypoint)
-  submission.json     # which pack/mode you're competing in
+  submission.json     # target, mode, author, and submission id
 ```
 
 ```bash
@@ -171,7 +169,7 @@ uv run kata submission validate \
 # 4. commit on a branch, push, and open a PR against the default branch
 ```
 
-If the local CLI says the `sn60__bitsec/miner` lane is not registered, run the
+If the local CLI says the `sn60__bitsec/miner` target is not registered, run the
 command from the top-level Kata repo with `KATA_ROOT="$(pwd)"`:
 
 ```bash
@@ -194,7 +192,7 @@ analyzes the code it receives.
 
 ## Contributing to the engine
 
-Improvements to the evaluator, pack workflow, or competition machinery are welcome.
+Improvements to the evaluator, contributor workflow, or competition machinery are welcome.
 Local checks:
 
 ```bash
@@ -215,20 +213,20 @@ maintain this repository.
 
 To keep each competition outcome auditable, `kata-bot` records a PR's state as an
 **objective, color-coded label**, so its result can be read without re-running the
-evaluation. This is implemented today for the live `sn60__bitsec` pack:
+evaluation. This is implemented today for the live `sn60__bitsec` target:
 
 | Label | Color | Meaning |
 | --- | --- | --- |
 | `kata:pending` | blue | Screened and waiting for the next round. |
 | `kata:executing` | yellow | Competing in the round that is running now. |
-| `kata:winner:<pack>` | green | Beat the king → merged and promoted to king. |
+| `kata:winner:<target>` | green | Beat the king → merged and promoted to king. |
 | `kata:reward:s` | green | Valid promotion below the higher reward-tier thresholds. |
 | `kata:reward:m` | green | Medium promotion: at least 3 true positives, or +2 true positives over the king, or +15% score delta. |
 | `kata:reward:l` | green | Large promotion: at least 5 true positives, or +4 true positives over the king, or at least 60% detection score. |
 | `kata:reward:xl` | green | Extra-large promotion: at least 8 true positives, or +6 true positives over the king, or at least 85% detection score. |
 | `kata:losing` | grey | Competed but did not beat the king → closed. |
 | `kata:invalid` | red | Failed screening or exceeded the one-open-PR rule → closed. |
-| `kata:review` | gold | Suspicious but non-conclusive screening evidence → held out of rounds until a maintainer approves with `/kata approve`, re-runs screening with `/kata review`, closes it with `/kata close`, or the miner pushes a clean update. |
+| `kata:review` | gold | Suspicious but non-conclusive screening evidence → held out of rounds until review clears it or the miner pushes a clean update. |
 | `kata:stale` | orange | Benched: unchanged since it last competed → push to re-enter. |
 | `kata:hold` | purple | Won, but the merge is currently blocked → needs attention. |
 | `kata:mode:miner` | grey | The competition mode (applied on a win). |
@@ -238,8 +236,7 @@ Gittensor's **label and score rules** read these labels, so only a verified
 The extra `kata:reward:*` label tells Gittensor how strong the promotion was. Gittensor
 uses the highest matching label multiplier, so a PR with both `kata:winner:sn60__bitsec`
 and `kata:reward:m` is scored with the medium reward multiplier, not the base winner
-multiplier. As more subnets go live, each gets its own `kata:winner:<pack>` label, so
-packs can be scored independently.
+multiplier. As more subnets go live, each gets its own `kata:winner:<target>` label.
 
 Kata promotions also use Gittensor time decay. A fresh winner has the highest reward
 weight, then older winner PRs decay inside the lookback window. This means a newly
@@ -261,8 +258,8 @@ toward it.
 
 - `kata/` — engine subsystems: submissions, screening, validator, state, promotion,
   evaluator, and CLI interfaces.
-- `lanes/` — central pack registry (`registry.json`) plus per-lane state.
-- `kings/` — the published current king artifact per pack and mode.
+- `lanes/` — registry and state for supported competition targets.
+- `kings/` — the published current king artifact per target and mode.
 - `submissions/` — PR-submitted candidate bundles (one open PR per contributor; a merged
   winner's bundle is cleared once it becomes the king).
 - `runs/` — round and duel artifacts with reproducible provenance.
