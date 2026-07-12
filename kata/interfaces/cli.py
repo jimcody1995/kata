@@ -54,7 +54,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version="kata 0.1.0")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
+    _add_king_parser(subparsers)
+    _add_lane_parsers(subparsers)
+    _add_submission_parsers(subparsers)
+    _add_round_parser(subparsers)
+    _add_sn60_baseline_parser(subparsers)
+    return parser
 
+
+def _add_king_parser(subparsers) -> None:
     king = subparsers.add_parser(
         "king",
         help="Manage the current king agent for a lane.",
@@ -88,6 +96,8 @@ def build_parser() -> argparse.ArgumentParser:
     king_promote.add_argument("--json", action="store_true")
     king_promote.set_defaults(handler=handle_king_promote)
 
+
+def _add_lane_parsers(subparsers) -> None:
     lane = subparsers.add_parser(
         "lane",
         help="Manage evaluator-backed subnet packs and the central pack registry.",
@@ -164,6 +174,8 @@ def build_parser() -> argparse.ArgumentParser:
     lane_sync.add_argument("--json", action="store_true")
     lane_sync.set_defaults(handler=handle_lane_sync_registry)
 
+
+def _add_submission_parsers(subparsers) -> None:
     submission = subparsers.add_parser(
         "submission",
         help="Manage miner agent submissions for PR-based competition.",
@@ -362,6 +374,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     submission_decide.set_defaults(handler=handle_submission_decide)
 
+
+def _add_round_parser(subparsers) -> None:
     round_cmd = subparsers.add_parser(
         "round",
         help="Score the king against several candidates on the same projects and rank them.",
@@ -422,6 +436,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     round_cmd.set_defaults(handler=handle_round)
 
+
+def _add_sn60_baseline_parser(subparsers) -> None:
     baseline_cmd = subparsers.add_parser(
         "sn60-baseline",
         help="Score one proof-only SN60 baseline artifact without evaluating the Kata king.",
@@ -453,8 +469,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit machine-readable JSON instead of text.",
     )
     baseline_cmd.set_defaults(handler=handle_sn60_baseline)
-
-    return parser
 
 
 def handle_king_promote(args: argparse.Namespace) -> int:
