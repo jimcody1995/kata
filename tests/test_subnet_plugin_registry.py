@@ -56,9 +56,15 @@ class _StubPlugin(SubnetPlugin):
 
 @pytest.fixture(autouse=True)
 def _isolate_registry():
+    # Save and restore any real registrations (e.g. the SN60 plugin registered by
+    # importing kata.packages.sn60 elsewhere) so these tests don't clobber global
+    # state regardless of test ordering.
+    saved = all_plugins()
     clear_registry()
     yield
     clear_registry()
+    for plugin in saved:
+        register_plugin(plugin)
 
 
 def test_register_and_get_plugin() -> None:

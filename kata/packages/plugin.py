@@ -63,7 +63,11 @@ class ScoreCard:
     # Margin a challenger must exceed the king by to win (0.0 == strict greater-than).
     beats_threshold: float = 0.0
     # Free-form display metrics (precision, f1, relevance, ...) for proofs/dashboard.
+    # Must stay JSON-serializable; native/opaque objects go in ``payload`` instead.
     metrics: dict[str, Any] = field(default_factory=dict)
+    # Opaque plugin-native result (e.g. the subnet's own summary object). The core
+    # never inspects or serializes this; the plugin uses it in compare()/beats_king().
+    payload: Any = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +91,9 @@ class RunContext:
 
     output_root: str
     env: EnvSpec
+    # Identifies the variant being run (e.g. "king" or a submission id) so the plugin
+    # can lay out per-variant artifacts without collision.
+    label: str = "candidate"
     progress: Callable[[ProgressUpdate], None] | None = None
 
 
