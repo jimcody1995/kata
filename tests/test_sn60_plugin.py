@@ -155,7 +155,9 @@ def test_sn60_plugin_scores_rank_and_beat_king_match_engine(tmp_path: Path) -> N
     assert plugin.beats_king(cards["cand-c"], king) is True
     assert plugin.beats_king(cards["cand-b"], king) is True
     assert plugin.beats_king(cards["cand-a"], king) is False
-    assert plugin.beats_king(cards["cand-a"], None) is True
+    # With no king (candidate-only), only a true-positive finder qualifies.
+    assert plugin.beats_king(cards["cand-c"], None) is True
+    assert plugin.beats_king(cards["cand-a"], None) is False
 
     # Score card exposes serializable metrics + the native summary in payload.
     assert cards["cand-c"].metrics["true_positives"] == 3

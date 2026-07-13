@@ -5,8 +5,8 @@ This is the core King-of-the-Hill round, driven entirely through the
 candidate, rank them with the plugin's comparator, and pick the top challenger that
 beats the king. It knows nothing about any specific subnet.
 
-Phase 3a introduces it as an additive, independently tested module; Phase 3b routes
-SN60's ``run_sn60_round`` through it.
+Each subnet's round runner delegates here; the core knows nothing about any specific
+subnet.
 """
 
 from __future__ import annotations

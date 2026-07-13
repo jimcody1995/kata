@@ -93,6 +93,15 @@ class Sn60BitsecPlugin(SubnetPlugin):
         # SN60 agents run sealed except for the pinned-model inference relay.
         return EnvSpec(network="relay_only")
 
+    def resolve_execution_hook(self, source: Sn60SandboxSource) -> Sn60ExecutionHook:
+        """The execution hook (injected in tests, real sandbox in production)."""
+        return self._execution_hook or build_default_execution_hook(source)
+
+    def card_for_summary(self, summary: Sn60VariantSummary) -> ScoreCard:
+        """Wrap an already-computed variant summary as a ScoreCard (e.g. a screener
+        failure) so it ranks uniformly with scored candidates."""
+        return self._score_card(summary)
+
     def sample_problems(self, *, seed: str, config: dict[str, Any]) -> Sn60Problems:
         sandbox_source = resolve_sn60_sandbox_source(
             sandbox_root=config.get("sandbox_root"),
@@ -127,6 +136,10 @@ class Sn60BitsecPlugin(SubnetPlugin):
         evaluation_hook = self._evaluation_hook or build_default_evaluation_hook(source)
         artifact_root = Path(agent_path).expanduser().resolve()
         label = context.label
+        # The generic label identifies the run dir; the evaluator's variant name stays
+        # "king"/"candidate" so execution/evaluation hooks see the same variant as the
+        # legacy duel path.
+        variant_name = "king" if label == "king" else "candidate"
 
         # Emit live per-replica progress through the generic callback, accumulating
         # SN60's running metrics + per-problem breakdown so the board fills in live.
@@ -152,7 +165,7 @@ class Sn60BitsecPlugin(SubnetPlugin):
         replica_results = score_variant_on_projects(
             run_id=f"{problems.run_id}-{label}",
             run_root=Path(context.output_root) / label,
-            variant_name=label,
+            variant_name=variant_name,
             artifact_root=artifact_root,
             project_keys=problems.project_keys,
             replicas_per_project=problems.replicas_per_project,
@@ -162,7 +175,7 @@ class Sn60BitsecPlugin(SubnetPlugin):
             progress_callback=_on_replica if context.progress is not None else None,
         )
         return Sn60RawRun(
-            variant_name=label,
+            variant_name=variant_name,
             artifact_root=str(artifact_root),
             artifact_hash=hash_bundle_root(artifact_root),
             replica_results=replica_results,
@@ -197,6 +210,8 @@ class Sn60BitsecPlugin(SubnetPlugin):
 
     def beats_king(self, candidate: ScoreCard, king: ScoreCard | None) -> bool:
         if king is None:
-            return True
+            # No king to beat (candidate-only recovery): a candidate qualifies as
+            # winner only if it found at least one true-positive vulnerability.
+            return candidate.payload.true_positives > 0
         decision = evaluate_sn60_promotion(king=king.payload, candidate=candidate.payload)
         return decision.promotion_ready

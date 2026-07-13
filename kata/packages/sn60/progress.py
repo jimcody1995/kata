@@ -34,6 +34,7 @@ class Sn60RoundProgress:
         candidate_only: bool = False,
     ) -> None:
         self._path = progress_path
+        self._candidate_only = candidate_only
         self._progress: dict = {
             "schema_version": DEFAULT_SN60_ROUND_SCHEMA_VERSION,
             "state": "executing",
@@ -79,6 +80,23 @@ class Sn60RoundProgress:
         for key, value in update.metrics.items():
             if key not in _STRUCTURAL_KEYS:
                 target[key] = value
+        self._write()
+
+    def mark_screened_out(
+        self, label: str, *, screening_result: dict, snapshot: dict
+    ) -> None:
+        """Mark a candidate that failed the execution screener as failed (not scored)."""
+        entry = self._by_label.get(label)
+        if entry is None:
+            return
+        entry["state"] = "failed"
+        entry["done"] = 0
+        entry["failure_reason"] = "candidate failed SN60 screener project"
+        entry["screening_result"] = screening_result
+        entry["beats_king"] = None if self._candidate_only else False
+        for key, value in snapshot.items():
+            if key not in _STRUCTURAL_KEYS:
+                entry[key] = value
         self._write()
 
     def finalize(self, outcome: RoundOutcome, plugin) -> None:

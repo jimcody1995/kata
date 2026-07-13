@@ -35,14 +35,14 @@
         "replica_results": [
           {
             "detection_rate": 0.75,
-            "evaluation_path": "<TMP>/runs/<RUN_ID>/<DUEL_ID>/candidate/project-alpha/replica-01/reports/project-alpha/evaluation.json",
+            "evaluation_path": "<TMP>/runs/<RUN_ID>/cand-c/candidate/project-alpha/replica-01/reports/project-alpha/evaluation.json",
             "evaluation_status": "success",
             "execution_success": true,
             "f1_score": 0.75,
             "precision": 1.0,
             "project_key": "project-alpha",
             "replica_index": 1,
-            "report_path": "<TMP>/runs/<RUN_ID>/<DUEL_ID>/candidate/project-alpha/replica-01/reports/project-alpha/report.json",
+            "report_path": "<TMP>/runs/<RUN_ID>/cand-c/candidate/project-alpha/replica-01/reports/project-alpha/report.json",
             "result": "FAIL",
             "score": 0.75,
             "total_expected": 4,
@@ -56,7 +56,7 @@
         "true_positives": 3,
         "variant_name": "candidate"
       },
-      "duel_run_id": "<DUEL_ID>",
+      "duel_run_id": "<RUN_ID>-cand-c",
       "screening_result": null,
       "selected_winner": true,
       "submission_id": "cand-c"
@@ -94,14 +94,14 @@
         "replica_results": [
           {
             "detection_rate": 0.5,
-            "evaluation_path": "<TMP>/runs/<RUN_ID>/<DUEL_ID>/candidate/project-alpha/replica-01/reports/project-alpha/evaluation.json",
+            "evaluation_path": "<TMP>/runs/<RUN_ID>/cand-b/candidate/project-alpha/replica-01/reports/project-alpha/evaluation.json",
             "evaluation_status": "success",
             "execution_success": true,
             "f1_score": 0.5,
             "precision": 1.0,
             "project_key": "project-alpha",
             "replica_index": 1,
-            "report_path": "<TMP>/runs/<RUN_ID>/<DUEL_ID>/candidate/project-alpha/replica-01/reports/project-alpha/report.json",
+            "report_path": "<TMP>/runs/<RUN_ID>/cand-b/candidate/project-alpha/replica-01/reports/project-alpha/report.json",
             "result": "FAIL",
             "score": 0.5,
             "total_expected": 4,
@@ -115,7 +115,7 @@
         "true_positives": 2,
         "variant_name": "candidate"
       },
-      "duel_run_id": "<DUEL_ID>",
+      "duel_run_id": "<RUN_ID>-cand-b",
       "screening_result": null,
       "selected_winner": false,
       "submission_id": "cand-b"
@@ -153,14 +153,14 @@
         "replica_results": [
           {
             "detection_rate": 0.0,
-            "evaluation_path": "<TMP>/runs/<RUN_ID>/<DUEL_ID>/candidate/project-alpha/replica-01/reports/project-alpha/evaluation.json",
+            "evaluation_path": "<TMP>/runs/<RUN_ID>/cand-a/candidate/project-alpha/replica-01/reports/project-alpha/evaluation.json",
             "evaluation_status": "success",
             "execution_success": true,
             "f1_score": 0.0,
             "precision": 1.0,
             "project_key": "project-alpha",
             "replica_index": 1,
-            "report_path": "<TMP>/runs/<RUN_ID>/<DUEL_ID>/candidate/project-alpha/replica-01/reports/project-alpha/report.json",
+            "report_path": "<TMP>/runs/<RUN_ID>/cand-a/candidate/project-alpha/replica-01/reports/project-alpha/report.json",
             "result": "FAIL",
             "score": 0.0,
             "total_expected": 4,
@@ -174,7 +174,7 @@
         "true_positives": 0,
         "variant_name": "candidate"
       },
-      "duel_run_id": "<DUEL_ID>",
+      "duel_run_id": "<RUN_ID>-cand-a",
       "screening_result": null,
       "selected_winner": false,
       "submission_id": "cand-a"
@@ -209,14 +209,14 @@
     "replica_results": [
       {
         "detection_rate": 0.25,
-        "evaluation_path": "<TMP>/runs/<RUN_ID>/<DUEL_ID>/king/project-alpha/replica-01/reports/project-alpha/evaluation.json",
+        "evaluation_path": "<TMP>/runs/<RUN_ID>/king/king/project-alpha/replica-01/reports/project-alpha/evaluation.json",
         "evaluation_status": "success",
         "execution_success": true,
         "f1_score": 0.25,
         "precision": 1.0,
         "project_key": "project-alpha",
         "replica_index": 1,
-        "report_path": "<TMP>/runs/<RUN_ID>/<DUEL_ID>/king/project-alpha/replica-01/reports/project-alpha/report.json",
+        "report_path": "<TMP>/runs/<RUN_ID>/king/king/project-alpha/replica-01/reports/project-alpha/report.json",
         "result": "FAIL",
         "score": 0.25,
         "total_expected": 4,
@@ -250,6 +250,6 @@
   },
   "schema_version": 1,
   "validator_replica_count": 1,
-  "winner_challenge_summary_path": "<TMP>/runs/<RUN_ID>/<DUEL_ID>/challenge_summary.json",
+  "winner_challenge_summary_path": "<TMP>/runs/<RUN_ID>/cand-c/challenge_summary.json",
   "winner_submission_id": "cand-c"
 }
