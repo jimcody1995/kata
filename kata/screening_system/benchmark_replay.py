@@ -38,6 +38,15 @@ CONCRETE_REPLAY_RULE_IDS = frozenset(
 MIN_LONG_ANSWER_WORDS = 24
 PROJECT_FINGERPRINT_BRANCH_THRESHOLD = 3
 EARLY_RETURN_FINGERPRINT_THRESHOLD = 2
+# A long ALL-lowercase identifier is still a distinctive fingerprint. Capturing it
+# defeats the case-folding evasion: an agent that lowercases the source before
+# matching hardcoded benchmark identifiers (e.g. "redelegatewithdrawnhype") strips the
+# camelCase the tokenizer used to key on, hiding the fingerprint from the branch check.
+LONG_LOWERCASE_FINGERPRINT_MIN_CHARS = 12
+# An identifier is a benchmark fingerprint only if it is specific to a few projects.
+# Tokens common across many projects (shared library names, generic vocabulary) are not
+# fingerprints; this keeps the long-lowercase capture precise and avoids false positives.
+MAX_PROJECTS_FOR_DISTINCTIVE_TOKEN = 2
 STATIC_REPORT_BANK_MIN_FINDINGS = 3
 STATIC_REPORT_BANK_MIN_TEXT_CHARS = 1000
 
@@ -634,6 +643,28 @@ def load_benchmark_replay_signatures_from_path(path: str) -> BenchmarkReplaySign
         }
         if token_hashes:
             fingerprint_hashes_by_project[project_key] = token_hashes
+
+    # Rarity filter: keep only tokens specific to a few projects, so a hardcoded
+    # identifier unique to one benchmark project counts as a fingerprint while shared
+    # library names and generic words (present in many projects) do not.
+    project_count: dict[str, int] = {}
+    for hashes in fingerprint_hashes_by_project.values():
+        for token_hash in hashes:
+            project_count[token_hash] = project_count.get(token_hash, 0) + 1
+    distinctive_hashes = {
+        token_hash
+        for token_hash, count in project_count.items()
+        if count <= MAX_PROJECTS_FOR_DISTINCTIVE_TOKEN
+    }
+    fingerprint_hashes_by_project = {
+        project_key: (hashes & distinctive_hashes)
+        for project_key, hashes in fingerprint_hashes_by_project.items()
+    }
+    fingerprint_hashes_by_project = {
+        project_key: hashes
+        for project_key, hashes in fingerprint_hashes_by_project.items()
+        if hashes
+    }
     return BenchmarkReplaySignatures(
         title_hashes=frozenset(title_hashes),
         title_word_counts=frozenset(title_word_counts),
@@ -742,9 +773,13 @@ def fingerprint_tokens(text: str) -> set[str]:
             continue
         if lowered.startswith("code4rena"):
             continue
-        if "_" in token or any(char.isupper() for char in token[1:]) or any(
-            char.isdigit() for char in token
-        ):
+        distinctive = (
+            "_" in token
+            or any(char.isupper() for char in token[1:])
+            or any(char.isdigit() for char in token)
+            or len(lowered) >= LONG_LOWERCASE_FINGERPRINT_MIN_CHARS
+        )
+        if distinctive:
             tokens.add(lowered)
     return tokens
 

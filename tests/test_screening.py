@@ -354,6 +354,139 @@ def test_screen_submission_keeps_ambiguous_fingerprint_as_review_in_strict_mode(
     assert "benchmark_replay.early_return_fingerprint" in rule_ids
 
 
+def test_screen_submission_catches_case_folded_project_fingerprint(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    # Regression for the "disguised memorizer" king: it lowercased the source before
+    # matching benchmark-unique identifiers, which used to strip the camelCase the
+    # fingerprint check keyed on. Case-folded fingerprints must now be caught.
+    benchmark_path = tmp_path / "curated-highs-only-2025-08-08.json"
+    benchmark_path.write_text(
+        json.dumps(
+            [
+                {
+                    "project_id": "kinetiq_like",
+                    "name": "Kinetiq Like",
+                    "vulnerabilities": [
+                        {
+                            "finding_id": "2026-01-k_H-01",
+                            "severity": "high",
+                            "title": "Withdrawal buffer accounting",
+                            "description": (
+                                "The redelegateWithdrawnHYPE path leaves amountFromBuffer "
+                                "and _cancelledWithdrawalAmount inconsistent on "
+                                "cancelWithdrawal in the staking buffer accounting."
+                            ),
+                        }
+                    ],
+                }
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KATA_SN60_BENCHMARK_FILE", str(benchmark_path))
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        "    source = ''\n"
+        "    compact = source.lower()\n"
+        "    if (\n"
+        "        'redelegatewithdrawnhype' in compact\n"
+        "        and 'amountfrombuffer' in compact\n"
+        "        and '_cancelledwithdrawalamount' in compact\n"
+        "    ):\n"
+        "        return {'vulnerabilities': [{\n"
+        "            'title': 'Withdrawal buffer bug',\n"
+        "            'description': 'A long enough canned static finding about the buffer.',\n"
+        "            'severity': 'high',\n"
+        "            'file': 'contracts/Staking.sol',\n"
+        "        }]}\n"
+        "    return {'vulnerabilities': []}\n",
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        public_root=None,
+        mode="miner",
+        enable_review=True,
+        strict_replay=True,
+    )
+
+    rule_ids = {
+        finding.rule_id
+        for finding in decision.review_reasons + decision.reject_reasons
+    }
+    assert "benchmark_replay.project_fingerprint_branch" in rule_ids
+    assert "benchmark_replay.early_return_fingerprint" in rule_ids
+
+
+def test_screen_submission_does_not_flag_common_identifiers_as_fingerprints(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    # The rarity filter must keep the case-folded capture precise: identifiers that are
+    # common across many projects are not fingerprints, so an honest agent keying on
+    # generic terms is not falsely flagged.
+    projects = []
+    for index in range(6):
+        projects.append(
+            {
+                "project_id": f"project_{index}",
+                "name": f"Project {index}",
+                "vulnerabilities": [
+                    {
+                        "finding_id": f"2026-01-p{index}_H-01",
+                        "severity": "high",
+                        "title": "Reentrancy issue",
+                        # These terms recur across every project -> not distinctive.
+                        "description": (
+                            "The withdrawCollateral and liquidatePosition paths miss "
+                            "reentrancy protection in the settlement accounting."
+                        ),
+                    }
+                ],
+            }
+        )
+    benchmark_path = tmp_path / "curated-highs-only-2025-08-08.json"
+    benchmark_path.write_text(json.dumps(projects) + "\n", encoding="utf-8")
+    monkeypatch.setenv("KATA_SN60_BENCHMARK_FILE", str(benchmark_path))
+    bundle_root = tmp_path / "candidate"
+    write_bundle(
+        bundle_root,
+        "def agent_main(project_dir=None, inference_api=None):\n"
+        "    source = ''\n"
+        "    compact = source.lower()\n"
+        "    if (\n"
+        "        'withdrawcollateral' in compact\n"
+        "        and 'liquidateposition' in compact\n"
+        "    ):\n"
+        "        return {'vulnerabilities': [{\n"
+        "            'title': 'Reentrancy',\n"
+        f"            'description': {SCREENING_DESCRIPTION!r},\n"
+        "            'severity': 'high',\n"
+        "            'file': 'contracts/Vault.sol',\n"
+        "        }]}\n"
+        "    return {'vulnerabilities': []}\n",
+    )
+
+    decision = screen_submission(
+        submission_root=bundle_root,
+        public_root=None,
+        mode="miner",
+        enable_review=True,
+        strict_replay=True,
+    )
+    rule_ids = {
+        finding.rule_id
+        for finding in decision.review_reasons + decision.reject_reasons
+    }
+    assert "benchmark_replay.project_fingerprint_branch" not in rule_ids
+    assert "benchmark_replay.early_return_fingerprint" not in rule_ids
+
+
 def test_screen_submission_attaches_llm_review_for_review_findings(
     tmp_path: Path,
     monkeypatch,
