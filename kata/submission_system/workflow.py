@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from kata.packages.dispatch import plugin_for_evaluator
-from kata.packages.sn60 import validator_system as _validator_system
 from kata.promotion_system import LanePromotionResult
 from kata.promotion_system import (
     find_evaluator_pack_entry as find_evaluator_pack_entry,
@@ -66,9 +65,6 @@ from kata.submission_system.validation import (
     validate_submission_metadata,
 )
 from kata.util import dedupe
-
-ChallengeSummary = _validator_system.ChallengeSummary
-load_challenge_summary = _validator_system.load_challenge_summary
 
 
 def init_submission(
@@ -348,7 +344,6 @@ def verify_submission_result(
             + "; ".join(validation.reasons or ["unknown validation failure"])
         )
 
-    summary = load_challenge_summary(challenge_summary_path)
     candidate_hash = hash_submission_bundle(Path(validation.submission_path))
     evaluator_entry = find_evaluator_pack_entry(
         validation.metadata.repo_pack,
@@ -362,6 +357,11 @@ def verify_submission_result(
         )
     # Freshness is checked against the lane's plugin identity, not a hardcoded model.
     plugin = plugin_for_evaluator(evaluator_entry.evaluator_id)
+    if plugin is None:
+        raise ValueError(
+            f"No subnet plugin is registered for evaluator '{evaluator_entry.evaluator_id}'."
+        )
+    summary = plugin.load_challenge_summary(challenge_summary_path)
     validator_identity = (
         plugin.validator_identity if plugin is not None else ""
     )
@@ -532,7 +532,6 @@ def promote_submission_result(
             "Submission is not safe to promote. "
             + "; ".join(verification.reasons or ["submission result is not auto-merge ready"])
         )
-    summary = load_challenge_summary(challenge_summary_path)
     evaluator_entry = find_evaluator_pack_entry(
         verification.repo_pack, verification.mode, public_root=public_root
     )
@@ -541,6 +540,12 @@ def promote_submission_result(
             "No evaluator-backed lane is registered for "
             f"`{verification.repo_pack}/{verification.mode}`."
         )
+    plugin = plugin_for_evaluator(evaluator_entry.evaluator_id)
+    if plugin is None:
+        raise ValueError(
+            f"No subnet plugin is registered for evaluator '{evaluator_entry.evaluator_id}'."
+        )
+    summary = plugin.load_challenge_summary(challenge_summary_path)
     return promote_lane_king(
         entry=evaluator_entry,
         verification=verification,

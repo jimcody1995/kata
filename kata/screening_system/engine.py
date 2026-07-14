@@ -51,7 +51,7 @@ def _plugin_benchmark_review(
     """Subnet anti-memorization (benchmark-replay) review from the lane's plugin.
 
     Returns ``(reject_findings, review_findings, score)`` -- all empty for lanes with no
-    plugin or no benchmark review (e.g. non-SN60 subnets).
+    plugin or no benchmark review.
     """
     from kata.packages.dispatch import plugin_for_pack
 
@@ -107,7 +107,7 @@ def screen_submission(
     reject_findings.extend(screen_submission_bundle_files(submission_root))
     reject_findings.extend(screen_bundle_python_sources(bundle_files))
     reject_findings.extend(screen_bundle_static_policy(bundle_files))
-    # Subnet-specific static checks (e.g. SN60's benchmark-leak rules) run only for the
+    # Subnet-specific static checks (a subnet's own rules) run only for the
     # lane's own plugin; the generic anti-cheat checks above run for every subnet.
     reject_findings.extend(
         _plugin_static_screen_findings(

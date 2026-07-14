@@ -1,11 +1,9 @@
-"""The subnet plugin contract (Phase 1 of the multi-subnet refactor).
+"""The subnet plugin contract.
 
-A subnet plugin bundles everything subnet-specific -- task, environment, scorer, and
-config -- behind one interface so the Kata core can run its King-of-the-Hill
-competition without knowing what any subnet does. SN60 is just the first plugin.
-
-Nothing calls this yet: SN60 is wrapped against it in Phase 2, and the core round /
-decision paths are routed through it in Phases 3-4.
+A subnet plugin bundles everything subnet-specific -- task, environment, scorer, screening,
+and config -- behind one interface so the Kata core runs its King-of-the-Hill competition
+without knowing what any subnet does. The core resolves a plugin by evaluator id and calls
+only the members below; adding a subnet is a new plugin, not a core change.
 """
 
 from __future__ import annotations
@@ -29,7 +27,7 @@ class ScoringProfile(str, Enum):
     """How the core must treat a subnet's scores."""
 
     # Objective and offline: the king's score is reproducible, so it can be cached
-    # by benchmark identity and re-used across a round (e.g. SN60).
+    # by benchmark identity and re-used across a round (deterministic subnets).
     DETERMINISTIC = "deterministic"
     # Live and/or LLM-judged: scores drift run-to-run, so the core averages repeats
     # and re-scores the king every round (e.g. SN22).
@@ -40,7 +38,7 @@ class ScoringProfile(str, Enum):
 class EnvSpec:
     """The environment a candidate agent must run in."""
 
-    # "none": fully sealed. "relay_only": only the pinned-model relay (SN60).
+    # "none": fully sealed. "relay_only": only the pinned-model relay.
     # "allowlist": relay + the hosts in ``allowed_hosts`` (live subnets like SN22).
     network: NetworkPolicy = "relay_only"
     allowed_hosts: tuple[str, ...] = ()
@@ -105,9 +103,9 @@ class SubnetPlugin(ABC):
     set the class attributes below and implement the abstract methods.
     """
 
-    #: Stable evaluator id; equals the lane's ``evaluator_id`` (e.g. "sn60_bitsec").
+    #: Stable evaluator id; equals the lane's ``evaluator_id``.
     evaluator_id: str
-    #: Submission pack segment -- submissions/<pack>/<mode>/<id>/ (e.g. "sn60__bitsec").
+    #: Submission pack segment -- submissions/<pack>/<mode>/<id>/.
     pack: str
     #: Submission mode segment (e.g. "miner").
     mode: str
@@ -188,6 +186,16 @@ class SubnetPlugin(ABC):
         """Extra subnet-specific reject reasons during verification. Default: none."""
         return []
 
+    def load_challenge_summary(self, path):
+        """Load this subnet's challenge/round summary from ``path``.
+
+        The summary is the subnet's native round result; the generic verify/promote path
+        reads only common attributes off it. Default: unsupported.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement load_challenge_summary"
+        )
+
     def benchmark_review(self, bundle_files, *, strict):
         """Subnet anti-memorization review of a candidate bundle.
 
@@ -235,7 +243,7 @@ class SubnetPlugin(ABC):
         """Run one competition round for this subnet and return its result.
 
         The default drives the generic orchestrator and returns a ``RoundOutcome``;
-        subnets that produce their own proof/summary files (e.g. SN60) override this
+        subnets that produce their own proof/summary files override this
         to write them and return their native result. Imported lazily to avoid a
         module-load cycle with ``kata.core.round``.
         """

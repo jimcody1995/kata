@@ -257,6 +257,11 @@ class Sn60BitsecPlugin(SubnetPlugin):
             lane_id=lane_id, summary=summary, public_root=public_root
         )
 
+    def load_challenge_summary(self, path):
+        from kata.packages.sn60.validator_system import load_challenge_summary
+
+        return load_challenge_summary(path)
+
     def benchmark_review(self, bundle_files, *, strict):
         from kata.packages.sn60.screening import sn60_benchmark_review
 
