@@ -281,7 +281,7 @@ def screen_bundle_miner_contract(parsed_trees: dict[str, ast.AST]) -> list[Scree
             return [
                 reject_finding(
                     "bundle.agent_main_async",
-                    "Submission agent_main must be a synchronous function; the SN60 "
+                    "Submission agent_main must be a synchronous function; the "
                     "sandbox runner calls agent_main() directly and does not await "
                     "coroutines.",
                     path=AGENT_ENTRY_FILENAME,
@@ -312,7 +312,7 @@ def screen_bundle_miner_contract(parsed_trees: dict[str, ast.AST]) -> list[Scree
             return [
                 reject_finding(
                     "bundle.report_shape",
-                    "Submission agent must return a Bitsec-compatible report with "
+                    "Submission agent must return a report with "
                     "top-level `vulnerabilities`.",
                     path=AGENT_ENTRY_FILENAME,
                     line=return_node.lineno,
