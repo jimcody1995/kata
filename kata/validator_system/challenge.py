@@ -652,23 +652,6 @@ def run_optional_sn60_screener_project(
     )
 
 
-def sn60_effective_screening_result(
-    *,
-    screening_result: dict[str, object] | None,
-    screener_result: dict[str, object] | None,
-) -> dict[str, object] | None:
-    if screening_result is None:
-        return screener_result
-    if screener_result is None:
-        return screening_result
-    merged = dict(screener_result)
-    merged["details"] = {
-        **dict(merged.get("details") or {}),
-        "caller_context": screening_result,
-    }
-    return merged
-
-
 def sn60_pass_score(summary: Sn60VariantSummary) -> float:
     total_projects = len(summary.project_summaries)
     return summary.codebase_pass_count / total_projects if total_projects else 0.0
