@@ -12,7 +12,7 @@ from pathlib import Path
 from kata.evaluators.sn60_bitsec import DEFAULT_REPLICAS_PER_PROJECT
 from kata.promotion_system import resolve_sn60_king_artifact
 from kata.screening_system.rules import hash_submission_bundle
-from kata.submission_system.workflow import is_sn60_miner_metadata, validate_submission
+from kata.submission_system.workflow import is_evaluable_submission, validate_submission
 from kata.validator_system import (
     ChallengeSummary,
     resolve_sn60_project_keys,
@@ -36,7 +36,7 @@ def evaluate_submission(
             "Submission is invalid. Run `kata submission validate` first. "
             + "; ".join(validation.reasons or ["unknown validation failure"])
         )
-    if not is_sn60_miner_metadata(validation.metadata):
+    if not is_evaluable_submission(validation.metadata):
         raise ValueError(
             "Submission does not target a registered SN60 evaluator lane. "
             "Register the lane in the pack registry before evaluating."

@@ -60,7 +60,7 @@ def validate_submission_lane(
     return []
 
 
-def resolve_sn60_lane_king_hash(
+def resolve_lane_king_hash(
     lane_id: str,
     *,
     repo_pack: str,

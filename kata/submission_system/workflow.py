@@ -14,7 +14,7 @@ from kata.promotion_system import (
     promote_lane_king as promote_lane_king,
 )
 from kata.promotion_system import (
-    resolve_sn60_lane_king_hash as resolve_sn60_lane_king_hash,
+    resolve_lane_king_hash as resolve_lane_king_hash,
 )
 from kata.promotion_system import (
     validate_submission_lane as validate_submission_lane,
@@ -240,7 +240,7 @@ def plugin_for_submission(
     return plugin_for_evaluator(entry.evaluator_id)
 
 
-def is_sn60_miner_metadata(metadata: SubmissionMetadata) -> bool:
+def is_evaluable_submission(metadata: SubmissionMetadata) -> bool:
     # A submission is evaluable when a subnet plugin is registered for its lane; the
     # dispatch is by evaluator id, not a hardcoded SN60 check.
     return plugin_for_submission(metadata) is not None
@@ -369,7 +369,7 @@ def verify_submission_result(
         plugin.validator_identity if plugin is not None else SN60_VALIDATOR_MODEL
     )
     current_king_hash = (
-        resolve_sn60_lane_king_hash(
+        resolve_lane_king_hash(
             evaluator_entry.lane_id,
             repo_pack=validation.metadata.repo_pack,
             mode=validation.metadata.mode,

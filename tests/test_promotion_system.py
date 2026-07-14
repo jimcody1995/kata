@@ -8,7 +8,7 @@ from kata.evaluators.sn60_bitsec import hash_bundle_root
 from kata.promotion_system import (
     find_evaluator_pack_entry,
     promote_lane_king,
-    resolve_sn60_lane_king_hash,
+    resolve_lane_king_hash,
     validate_submission_lane,
 )
 from kata.screening_system.rules import hash_submission_bundle
@@ -159,12 +159,12 @@ def test_find_evaluator_pack_entry_and_validate_lane(tmp_path: Path) -> None:
     assert validate_submission_lane("sn60__bitsec", "miner", public_root=str(tmp_path)) == []
 
 
-def test_resolve_sn60_lane_king_hash_falls_back_to_published_king(
+def test_resolve_lane_king_hash_falls_back_to_published_king(
     tmp_path: Path,
 ) -> None:
     write_bundle(tmp_path / "kings/sn60__bitsec/miner")
 
-    assert resolve_sn60_lane_king_hash(
+    assert resolve_lane_king_hash(
         "sn60__bitsec",
         repo_pack="sn60__bitsec",
         mode="miner",
