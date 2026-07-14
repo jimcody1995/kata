@@ -7,31 +7,9 @@
     "sandbox_commit": "981c93373b7dc49bde9598173e6fa3bd26acc98e",
     "scorer_version": "ScaBenchScorerV2"
   },
-  "current_king": {
-    "artifact_hash": "a24175dd6d7e5123d812c129f1a6e6f02040175656e66feb1df9a50b847d022a",
-    "author": "Daedalus-Icarus",
-    "path": "kings/sn60__bitsec/miner",
-    "promoted_at": "2026-07-11T01:26:45.209206+00:00",
-    "source_pull_request": 124,
-    "submission_id": "daedalus-Icarus-20260710-01"
-  },
+  "current_king": null,
   "dashboard_url": "https://dashboardking.ngrok.app",
-  "latest_round": {
-    "best_detection_score": 0.2222222222222222,
-    "best_true_positives": 26,
-    "candidate_count": 13,
-    "competition_mode": "king_duel",
-    "duration_seconds": null,
-    "finished_at": "2026-07-11T01:26:16.080537+00:00",
-    "outcome": "king_promoted",
-    "proof": "public-results/rounds/sn60-round-20260710T201843Z-37999a.json",
-    "round_id": "sn60-round-20260710T201843Z-37999a",
-    "round_number": 3,
-    "started_at": null,
-    "winner_author": "Daedalus-Icarus",
-    "winner_pull_request": 124,
-    "winner_submission_id": "daedalus-Icarus-20260710-01"
-  },
+  "latest_round": null,
   "schema_version": 1,
-  "updated_at": "2026-07-11T05:37:21.133274+00:00"
+  "updated_at": "2026-07-14T15:01:53.135797+00:00"
 }
