@@ -42,7 +42,10 @@ def resolve_submission_descriptor(
         if SUBMISSIONS_DIRNAME in parts:
             parts = parts[parts.index(SUBMISSIONS_DIRNAME) :]
 
-    if len(parts) < 4 or parts[0] != SUBMISSIONS_DIRNAME:
+    # A submission root is the directory identified by these four components.
+    # Optional helper modules live *inside* that root (``helpers/*.py``), not in
+    # a nested directory passed as the root itself.
+    if len(parts) != 4 or parts[0] != SUBMISSIONS_DIRNAME:
         reasons.append(
             "Submission path must match `submissions/<subnet-pack>/<mode>/<submission-id>`."
         )

@@ -59,6 +59,47 @@ def test_resolve_submission_descriptor_parses_repo_relative_path(tmp_path: Path)
     assert descriptor.agent_path == submission_root / "agent.py"
 
 
+def test_resolve_submission_descriptor_rejects_nested_helper_as_submission_root(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "kata"
+    submission_root = (
+        repo_root / SUBMISSIONS_DIRNAME / "sn60__bitsec" / "miner" / "alice-20260708-01"
+    )
+    helper_root = submission_root / "helpers"
+    helper_root.mkdir(parents=True)
+
+    descriptor, reasons = resolve_submission_descriptor(
+        helper_root,
+        repo_root=repo_root,
+    )
+
+    assert descriptor is None
+    assert reasons == [
+        "Submission path must match `submissions/<subnet-pack>/<mode>/<submission-id>`."
+    ]
+
+
+def test_changed_path_validation_allows_helper_module(tmp_path: Path) -> None:
+    descriptor = SubmissionDescriptor(
+        root=tmp_path / "submissions/sn60__bitsec/miner/alice-20260708-01",
+        repo_pack="sn60__bitsec",
+        mode="miner",
+        submission_id="alice-20260708-01",
+        agent_path=tmp_path / "agent.py",
+        agent_manifest_path=tmp_path / "agent_manifest.json",
+        metadata_path=tmp_path / "submission.json",
+    )
+
+    result = validate_changed_paths(
+        descriptor,
+        ["submissions/sn60__bitsec/miner/alice-20260708-01/helpers/audit.py"],
+    )
+
+    assert result.off_scope_paths == []
+    assert result.reasons == []
+
+
 def test_changed_path_validation_requires_single_bundle_scope(tmp_path: Path) -> None:
     descriptor = SubmissionDescriptor(
         root=tmp_path / "submissions/sn60__bitsec/miner/alice-20260708-01",
