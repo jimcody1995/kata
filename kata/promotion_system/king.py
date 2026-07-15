@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from kata.screening_system.engine import screen_submission
 from kata.screening_system.rules import hash_submission_bundle
 from kata.state_system.lane import (
     KING_STATE_SCHEMA_VERSION,
@@ -19,6 +20,11 @@ from kata.state_system.public_artifacts import (
     resolve_public_king_root,
 )
 from kata.submission_system import SUBMISSION_AGENT_FILENAME, SubmissionMetadata
+from kata.submission_system.bundle import (
+    AGENT_MANIFEST_FILENAME,
+    find_unexpected_bundle_paths,
+    validate_agent_manifest,
+)
 
 
 @dataclass(frozen=True)
@@ -26,6 +32,16 @@ class LanePromotionResult:
     lane_id: str
     king_root: str
     king: LaneKingState
+
+
+@dataclass(frozen=True)
+class LaneBootstrapResult:
+    """Result of explicitly seeding a lane with its maintained baseline."""
+
+    lane_id: str
+    king_root: str
+    king: LaneKingState
+    baseline_id: str
 
 
 def find_evaluator_pack_entry(
@@ -96,6 +112,99 @@ def resolve_lane_king_artifact(metadata: SubmissionMetadata) -> tuple[str, str]:
             "Seed the current king under kings/<subnet-pack>/<mode>/ before running duels."
         )
     return entry.lane_id, str(king_root)
+
+
+def bootstrap_lane_king(
+    *,
+    entry: PackRegistryEntry,
+    baseline_path: str,
+    baseline_id: str,
+    public_root: str | None = None,
+    replace_existing: bool = False,
+) -> LaneBootstrapResult:
+    """Screen and publish a maintained baseline as the first king of a lane.
+
+    A baseline is not a PR promotion, but it must pass the exact generic and
+    subnet-specific screening gate used for a miner submission.  This avoids an
+    implicit empty king while keeping initialisation auditable and fail-closed.
+    """
+    from pathlib import Path
+
+    from kata.packages.dispatch import plugin_for_evaluator
+
+    root = Path(baseline_path).expanduser().resolve()
+    if not baseline_id.strip():
+        raise ValueError("Baseline id must not be empty.")
+    if not root.is_dir():
+        raise ValueError(f"Baseline artifact directory does not exist: {root}")
+    if not (root / SUBMISSION_AGENT_FILENAME).is_file():
+        raise ValueError(
+            f"Baseline artifact is missing required file: {SUBMISSION_AGENT_FILENAME}"
+        )
+    manifest_path = root / AGENT_MANIFEST_FILENAME
+    if not manifest_path.is_file():
+        raise ValueError(
+            f"Baseline artifact is missing required file: {AGENT_MANIFEST_FILENAME}"
+        )
+    manifest_reasons = validate_agent_manifest(manifest_path)
+    if manifest_reasons:
+        raise ValueError("Baseline agent manifest is invalid: " + "; ".join(manifest_reasons))
+    unexpected = find_unexpected_bundle_paths(root)
+    if unexpected:
+        raise ValueError(
+            "Baseline artifact contains unsupported files: " + ", ".join(unexpected)
+        )
+
+    current = load_lane_king_state(entry.lane_id, public_root=public_root)
+    if current.current_king_artifact_hash and not replace_existing:
+        raise ValueError(
+            f"Lane '{entry.lane_id}' already has a king. Use --replace only for an "
+            "intentional baseline reset."
+        )
+
+    decision = screen_submission(
+        submission_root=root,
+        public_root=resolve_kata_root(public_root),
+        repo_pack=entry.repo_pack,
+        mode=entry.mode,
+        check_current_king=False,
+    )
+    if not decision.passed:
+        messages = decision.rejection_messages() or [
+            "Baseline requires review before it can be seeded."
+        ]
+        raise ValueError("Baseline failed the screening gate: " + "; ".join(messages))
+
+    plugin = plugin_for_evaluator(entry.evaluator_id)
+    if plugin is None:
+        raise ValueError(f"No subnet plugin is registered for evaluator '{entry.evaluator_id}'.")
+    source_hash = plugin.hash_bundle(root)
+    published = publish_public_king(
+        public_root=str(resolve_kata_root(public_root)),
+        repo_pack=entry.repo_pack,
+        mode=entry.mode,
+        submission_id=baseline_id.strip(),
+        challenge_run_id=f"baseline:{baseline_id.strip()}",
+        candidate_artifact_path=str(root),
+        candidate_artifact_hash=source_hash,
+        artifact_hasher=plugin.hash_bundle,
+    )
+    now = datetime.now(UTC).isoformat()
+    king = LaneKingState(
+        schema_version=KING_STATE_SCHEMA_VERSION,
+        current_king_submission_id=baseline_id.strip(),
+        current_king_artifact_hash=published.king_artifact_hash,
+        promotion_source_pr=None,
+        promotion_timestamp=now,
+        updated_at=now,
+    )
+    write_lane_king_state(entry.lane_id, king, public_root=public_root)
+    return LaneBootstrapResult(
+        lane_id=entry.lane_id,
+        king_root=str(published.king_root),
+        king=king,
+        baseline_id=baseline_id.strip(),
+    )
 
 
 def promote_lane_king(

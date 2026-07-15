@@ -93,6 +93,7 @@ def screen_submission(
     repo_pack: str | None = None,
     enable_review: bool | None = None,
     strict_replay: bool | None = None,
+    check_current_king: bool = True,
 ) -> ScreeningDecision:
     """Run the screening subsystem for a candidate submission.
 
@@ -123,16 +124,19 @@ def screen_submission(
         strict=resolve_strict_replay(strict_replay),
     )
     reject_findings.extend(bench_rejects)
-    copycat_rejects, copycat_reviews, copycat_score = screen_current_king_copycat(
-        submission_root=submission_root,
-        bundle_files=bundle_files,
-        repo_pack=repo_pack,
-        mode=mode,
-        public_root=str(public_root) if public_root is not None else None,
-    )
-    reject_findings.extend(copycat_rejects)
-    review_findings.extend(copycat_reviews)
-    review_score += copycat_score
+    # An explicit first-king bootstrap is screened for all static and subnet policy gates, but
+    # it cannot meaningfully be compared with the destination it is about to seed.
+    if check_current_king:
+        copycat_rejects, copycat_reviews, copycat_score = screen_current_king_copycat(
+            submission_root=submission_root,
+            bundle_files=bundle_files,
+            repo_pack=repo_pack,
+            mode=mode,
+            public_root=str(public_root) if public_root is not None else None,
+        )
+        reject_findings.extend(copycat_rejects)
+        review_findings.extend(copycat_reviews)
+        review_score += copycat_score
     notes: list[ScreeningFinding] = []
     reject_findings = dedupe_findings(reject_findings)
     review_findings = dedupe_findings(review_findings)
@@ -185,5 +189,4 @@ def resolve_review_mode(value: bool | None) -> bool:
         return value
     raw = os.environ.get(REVIEW_MODE_ENV, "")
     return raw.strip().lower() in {"1", "true", "yes", "on"}
-
 

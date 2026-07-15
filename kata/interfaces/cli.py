@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from kata.promotion_system import bootstrap_lane_king, find_evaluator_pack_entry
 from kata.state_system.lane import (
     LANE_METADATA_SCHEMA_VERSION,
     EvaluatorLaneMetadata,
@@ -87,6 +89,23 @@ def _add_king_parser(subparsers) -> None:
     )
     king_promote.add_argument("--json", action="store_true")
     king_promote.set_defaults(handler=handle_king_promote)
+
+    king_bootstrap = king_subparsers.add_parser(
+        "bootstrap",
+        help="Screen and seed an empty lane with a maintained baseline king.",
+    )
+    king_bootstrap.add_argument("--subnet-pack", required=True)
+    king_bootstrap.add_argument("--mode", default="miner")
+    king_bootstrap.add_argument("--baseline-path", required=True)
+    king_bootstrap.add_argument("--baseline-id", required=True)
+    king_bootstrap.add_argument("--public-root", default=None)
+    king_bootstrap.add_argument(
+        "--replace",
+        action="store_true",
+        help="Replace an existing king after screening. Intended only for controlled resets.",
+    )
+    king_bootstrap.add_argument("--json", action="store_true")
+    king_bootstrap.set_defaults(handler=handle_king_bootstrap)
 
 
 def _add_lane_parsers(subparsers) -> None:
@@ -390,6 +409,14 @@ def _add_round_parser(subparsers) -> None:
         help="Optional path to publish a live per-candidate progress snapshot for the dashboard.",
     )
     round_cmd.add_argument(
+        "--round-config-json",
+        default=None,
+        help=(
+            "Optional JSON object merged into the selected evaluator's round configuration. "
+            "Used by multi-lane operators to keep plugin settings lane-scoped."
+        ),
+    )
+    round_cmd.add_argument(
         "--json",
         action="store_true",
         help="Emit machine-readable JSON instead of text.",
@@ -433,6 +460,40 @@ def handle_king_promote(args: argparse.Namespace) -> int:
         print(
             f"Promoted `{result.king.current_king_submission_id}` "
             f"as king of lane `{result.lane_id}`."
+        )
+    return 0
+
+
+def handle_king_bootstrap(args: argparse.Namespace) -> int:
+    public_root = str(Path(args.public_root).expanduser().resolve()) if args.public_root else None
+    entry = find_evaluator_pack_entry(
+        args.subnet_pack,
+        args.mode,
+        public_root=public_root,
+    )
+    if entry is None:
+        raise SystemExit(
+            f"No evaluator-backed lane is registered for `{args.subnet_pack}/{args.mode}`."
+        )
+    result = bootstrap_lane_king(
+        entry=entry,
+        baseline_path=args.baseline_path,
+        baseline_id=args.baseline_id,
+        public_root=public_root,
+        replace_existing=args.replace,
+    )
+    if args.json:
+        print_json(
+            {
+                "lane_id": result.lane_id,
+                "baseline_id": result.baseline_id,
+                "king_root": result.king_root,
+                "current_king_artifact_hash": result.king.current_king_artifact_hash,
+            }
+        )
+    else:
+        print(
+            f"Seeded `{result.baseline_id}` as the baseline king of lane `{result.lane_id}`."
         )
     return 0
 
@@ -517,10 +578,19 @@ def handle_round(args: argparse.Namespace) -> int:
         raise SystemExit(
             f"No subnet plugin is registered for evaluator '{args.evaluator}'."
         )
+    config = plugin.build_round_config(args)
+    if args.round_config_json:
+        try:
+            overrides = json.loads(args.round_config_json)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"--round-config-json must be valid JSON: {exc}") from exc
+        if not isinstance(overrides, dict):
+            raise SystemExit("--round-config-json must be a JSON object")
+        config.update(overrides)
     result = plugin.run_round(
         king_agent_path=args.king_path,
         candidates=candidates,
-        config=plugin.build_round_config(args),
+        config=config,
         output_root=args.output_root or "runs",
         score_king=not args.candidate_only,
         progress_path=args.round_progress_path,
