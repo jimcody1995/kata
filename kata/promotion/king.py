@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from kata.screening.engine import screen_submission
 from kata.screening.rules import hash_submission_bundle
@@ -14,6 +16,7 @@ from kata.state.lanes import (
     KING_STATE_SCHEMA_VERSION,
     LaneKingState,
     PackRegistryEntry,
+    discover_active_lane_ids,
     lane_king_state_path,
     load_lane_king_state,
     load_pack_registry,
@@ -26,6 +29,7 @@ from kata.submissions.bundle import (
 )
 from kata.submissions.constants import SUBMISSION_AGENT_FILENAME
 from kata.submissions.models import SubmissionMetadata
+from kata.util import write_json
 
 
 @dataclass(frozen=True)
@@ -115,6 +119,64 @@ def resolve_lane_king_artifact(metadata: SubmissionMetadata) -> tuple[str, str]:
     return entry.lane_id, str(king_root)
 
 
+def _baseline_public_results_path(
+    *,
+    entry: PackRegistryEntry,
+    public_root: str | None,
+) -> Path:
+    """Return the public-current path without allowing lanes to overwrite each other."""
+    root = resolve_kata_root(public_root)
+    active_lane_ids = discover_active_lane_ids(public_root=str(root))
+    if len(active_lane_ids) > 1:
+        return root / "public-results" / entry.lane_id / "current.json"
+    return root / "public-results" / "current.json"
+
+
+def _read_public_current(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected a JSON object in public result file: {path}")
+    return payload
+
+
+def _publish_baseline_public_current(
+    *,
+    entry: PackRegistryEntry,
+    king: LaneKingState,
+    public_root: str | None,
+) -> Path:
+    """Publish a public current-king record for a screened baseline seed.
+
+    Baselines have no miner author or source PR, but they are real kings.  Keeping
+    this record in sync with the lane state lets public consumers and the board
+    show the initial competition state before the first promoted PR exists.
+    """
+    path = _baseline_public_results_path(entry=entry, public_root=public_root)
+    existing = _read_public_current(path)
+    benchmark = existing.get("benchmark")
+    dashboard_url = existing.get("dashboard_url")
+    payload = {
+        "schema_version": 1,
+        "updated_at": king.updated_at,
+        "active_pack": entry.repo_pack,
+        "active_mode": entry.mode,
+        "current_king": {
+            "author": None,
+            "submission_id": king.current_king_submission_id,
+            "source_pull_request": None,
+            "path": f"kings/{entry.repo_pack}/{entry.mode}",
+            "artifact_hash": king.current_king_artifact_hash,
+            "promoted_at": king.promotion_timestamp,
+        },
+        "latest_round": None,
+        "benchmark": benchmark if isinstance(benchmark, dict) else {},
+        "dashboard_url": dashboard_url if isinstance(dashboard_url, str) else None,
+    }
+    return write_json(path, payload)
+
+
 def bootstrap_lane_king(
     *,
     entry: PackRegistryEntry,
@@ -129,8 +191,6 @@ def bootstrap_lane_king(
     subnet-specific screening gate used for a miner submission.  This avoids an
     implicit empty king while keeping initialisation auditable and fail-closed.
     """
-    from pathlib import Path
-
     from kata.plugins.discovery import plugin_for_evaluator
 
     root = Path(baseline_path).expanduser().resolve()
@@ -150,8 +210,13 @@ def bootstrap_lane_king(
     if unexpected:
         raise ValueError("Baseline artifact contains unsupported files: " + ", ".join(unexpected))
 
-    current = load_lane_king_state(entry.lane_id, public_root=public_root)
-    if current.current_king_artifact_hash and not replace_existing:
+    current_path = lane_king_state_path(entry.lane_id, public_root=public_root)
+    current = (
+        load_lane_king_state(entry.lane_id, public_root=public_root)
+        if current_path.exists()
+        else None
+    )
+    if current and current.current_king_artifact_hash and not replace_existing:
         raise ValueError(
             f"Lane '{entry.lane_id}' already has a king. Use --replace only for an "
             "intentional baseline reset."
@@ -194,6 +259,11 @@ def bootstrap_lane_king(
         updated_at=now,
     )
     write_lane_king_state(entry.lane_id, king, public_root=public_root)
+    _publish_baseline_public_current(
+        entry=entry,
+        king=king,
+        public_root=public_root,
+    )
     return LaneBootstrapResult(
         lane_id=entry.lane_id,
         king_root=str(published.king_root),

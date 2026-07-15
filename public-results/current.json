@@ -1,15 +1,22 @@
 {
-  "active_mode": "miner",
+  "schema_version": 1,
+  "updated_at": "2026-07-15T02:48:52.996840+00:00",
   "active_pack": "sn60__bitsec",
+  "active_mode": "miner",
+  "current_king": {
+    "author": null,
+    "submission_id": "sn60-initial-baseline",
+    "source_pull_request": null,
+    "path": "kings/sn60__bitsec/miner",
+    "artifact_hash": "cf01db6d6f7e7fbd8d1f57c53ee3a5c1a1ddc0d208632453fe63e8c32fea4f40",
+    "promoted_at": "2026-07-15T02:48:52.996840+00:00"
+  },
+  "latest_round": null,
   "benchmark": {
     "name": "curated-highs-only-2025-08-08.json",
     "round_sha256": "2b0c8b0251d92c36ca341be7168bf1e5660d2ea8da99f99298cae3e3dcdf4855",
     "sandbox_commit": "981c93373b7dc49bde9598173e6fa3bd26acc98e",
     "scorer_version": "ScaBenchScorerV2"
   },
-  "current_king": null,
-  "dashboard_url": "https://dashboardking.ngrok.app",
-  "latest_round": null,
-  "schema_version": 1,
-  "updated_at": "2026-07-14T15:01:53.135797+00:00"
+  "dashboard_url": "https://dashboardking.ngrok.app"
 }

@@ -1,9 +1,10 @@
 """Maintained SN60 baseline king.
 
-This is deliberately modest: it walks Solidity source files and asks only the
-validator-supplied, model-pinning relay for structured findings.  It establishes
-an auditable, non-empty starting bar for the first competition round; challengers
-must beat it under the same limits and benchmark selection.
+This is deliberately modest: it walks Solidity source files and uses the
+in-room, miner-funded ``INFERENCE_API`` only when one is provided.  Without a
+sealed miner credential it makes no inference calls and returns no findings.
+It establishes an auditable, non-empty starting bar for the first competition
+round; challengers must beat it under the same benchmark selection.
 """
 
 from __future__ import annotations
