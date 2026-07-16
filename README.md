@@ -14,13 +14,13 @@
 
 ## ⚡ Built on Gittensor (Bittensor SN74)
 
-Kata's development runs on **Gittensor** 🌐, the open-source-software subnet on Bittensor (SN74). Gittensor coordinates the people who improve this repository and rewards their merged work.
+Kata's development runs on **Gittensor**, the open-source-software subnet on Bittensor (SN74). Gittensor coordinates the people who improve this repository and rewards their merged work.
 
-The reward loop is the whole reason to compete here:
-
-1. 🛠️ **Improve an agent** and open a pull request.
-2. 🏆 **Win a round** — beat the reigning king on the benchmark and get promoted.
-3. 💰 **Earn on-chain** — Gittensor rewards the promotion. A fresh 👑 king carries the most weight, and it decays over time, so staying on top means staying the best.
+> [!TIP]
+> **Win a round, become the king, earn on-chain** — the whole reason to compete here:
+> 1. Improve an agent and open a pull request.
+> 2. Win a round: beat the reigning king on the benchmark and get promoted.
+> 3. Gittensor rewards the promotion. A fresh king carries the most weight and decays over time, so staying on top means staying the best.
 
 You don't need to run Bittensor or join a Discord to take part. SN74 funds work on *this* repo, which is separate from the subnets Kata builds agents *for* (the targets below).
 
@@ -43,21 +43,26 @@ flowchart TD
     PROM["4 · Promote<br/>winner → new king in kings/"]
     BOARD["kata-board<br/>dashboard"]
 
-    subgraph SCORE["3 · Scoring a round · one engine, many subnets"]
+    subgraph SCORE["3 · Scoring — one engine drives every subnet in parallel"]
         direction LR
-        ENG["kata engine<br/>king vs candidates"]
-        PLG["subnet plugin<br/>SN60 · SN22 · +more"]
+        ENG["kata engine"]
+        SN60["SN60 · Bitsec"]
+        SN22["SN22 · Desearch"]
+        MORE["+ more targets"]
         TEE["kata-tee-runner<br/>sealed room · miner-paid"]
-        ENG -->|loads| PLG
-        PLG -->|runs agents| TEE
-        TEE -->|scores| ENG
+        ENG e7@--> SN60
+        ENG e8@--> SN22
+        ENG e9@--> MORE
+        SN60 e10@--> TEE
+        SN22 e11@--> TEE
+        MORE e12@--> TEE
     end
 
     C e1@--> BOT
     BOT e2@--> IN
     IN e3@--> RD
     RD e4@--> ENG
-    ENG e5@-->|top agent beats the king| PROM
+    TEE e5@-->|ranked · beats the king| PROM
     PROM e6@--> BOARD
     PROM -. becomes the next bar .-> RD
 
@@ -67,6 +72,12 @@ flowchart TD
     e4@{ animate: true }
     e5@{ animate: true }
     e6@{ animate: true }
+    e7@{ animate: true }
+    e8@{ animate: true }
+    e9@{ animate: true }
+    e10@{ animate: true }
+    e11@{ animate: true }
+    e12@{ animate: true }
 ```
 
 One engine drives every subnet. The core in this repo is subnet-neutral: it runs the competition, and a per-subnet plugin fills in the task, the benchmark, and the scoring. Adding a subnet is a new plugin, not a core change.
