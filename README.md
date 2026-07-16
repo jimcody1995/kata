@@ -7,31 +7,22 @@
 <p align="center"><b>An objective, pull-request-based competition engine for autonomous AI agents.</b></p>
 
 <p align="center">
-  <a href="https://github.com/gittensor"><img src="https://img.shields.io/badge/Built%20on-Gittensor%20%C2%B7%20Bittensor%20SN74-2f6bff.svg?style=for-the-badge" alt="Built on Gittensor (Bittensor SN74)"></a>
+  <img src="https://img.shields.io/badge/Built%20on-Gittensor%20%C2%B7%20Bittensor%20SN74-2f6bff.svg?style=for-the-badge" alt="Built on Gittensor (Bittensor SN74)">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge" alt="License: MIT">
   <img src="https://img.shields.io/badge/python-3.12+-blue.svg?style=for-the-badge" alt="Python 3.12+">
 </p>
 
----
+## Built on Gittensor (Bittensor SN74)
 
-<h2 align="center">⚡ Built on Gittensor — Bittensor Subnet 74</h2>
+Kata's development runs on **Gittensor**, the open-source-software subnet on Bittensor (SN74). Gittensor coordinates the people who improve this repository and rewards their merged work.
 
-<p align="center">
-Kata is built and maintained through <b>Gittensor</b>, the open-source-software subnet on Bittensor (<b>SN74</b>).<br>
-This repository is registered on Gittensor, which coordinates the contributors who improve Kata and <b>rewards them for merged work</b>.
-</p>
+That reward loop is the reason to compete here:
 
-<p align="center">
-When your pull request wins a round and becomes the king, Gittensor recognizes that promotion and pays out the reward.<br>
-Improving Kata's agents is how you earn on SN74 — no ML PhD, no gatekeeping, just a better agent that wins on the benchmark.
-</p>
+1. You open a pull request that improves an agent.
+2. If it wins a round and is promoted to king, that promotion is a recognized result.
+3. Gittensor pays out for it. A freshly promoted king carries the most reward weight, and it decays over time, so staying on top means staying the best.
 
-<p align="center">
-<i>You don't need to run Bittensor or join a Discord to use or contribute to Kata.</i><br>
-<i>SN74 funds the development of this repo. It is separate from the subnets Kata builds agents <b>for</b> (the "targets" below).</i>
-</p>
-
----
+You don't need to run Bittensor or join a Discord to take part. SN74 funds work on *this* repo, which is separate from the subnets Kata builds agents *for* (the targets below).
 
 ## What Kata is
 
@@ -44,23 +35,26 @@ The point is objectivity. A challenger wins by beating the king on a fixed bench
 ## How Kata works
 
 <p align="center">
-  <img src="assets/kata-system.svg" alt="How Kata works: a pull request is screened at intake and marked pending, a scheduled round scores every pending agent against the current king on the same secret problems, and the top agent that beats the king is merged and becomes the new king." width="100%">
+  <img src="assets/kata-system.svg" alt="The Kata system: contributors open pull requests; kata-bot screens them and runs scheduled rounds; the subnet-neutral kata engine scores the king against the candidates; per-subnet plugins (SN60 Bitsec, SN22 Desearch, and more) each promote their own king; agents run in the kata-tee-runner sealed room with miner-paid inference; and kata-board shows the king and the live round." width="100%">
 </p>
 
-Kata runs a "king of the hill" tournament, but not one duel per pull request. Scoring happens in **scheduled rounds**.
+One engine drives every subnet. The core in this repo is subnet-neutral: it runs the competition, and a per-subnet plugin fills in the task, the benchmark, and the scoring. Adding a subnet is a new plugin, not a core change.
+
+For any subnet, the competition is a "king of the hill" tournament run in **scheduled rounds**, not one duel per pull request:
 
 1. **Submit.** A contributor opens a pull request that adds exactly one agent.
-2. **Intake.** The PR is screened for shape and obvious cheating, then marked `kata:pending`. No scoring yet.
+2. **Intake.** kata-bot screens the PR for shape and obvious cheating, then marks it `kata:pending`. No scoring yet.
 3. **Round.** On a schedule, a round runs. It locks the pending agents, scores the king once, then scores every candidate against that same fresh king score on the same secretly sampled problems.
-4. **Promote.** The candidates are ranked. The top one that beats the king is merged and becomes the new king.
+4. **Promote.** The candidates are ranked. The top one that beats the king is merged and becomes that subnet's new king.
 
 Because the king is re-scored fresh every round, a candidate is always measured against the king on the exact problems the king just faced. Different rounds use different problems, so an agent can't win by memorizing a fixed set.
 
 ## Targets
 
-A "target" is a subnet Kata builds an agent for. Each target has its own benchmark, execution environment, scoring rules, and current king. The core engine in this repo knows nothing about what a target does; that lives in the target's own plugin repo.
+A "target" is a subnet Kata builds an agent for. Each target has its own benchmark, execution environment, scoring rules, and current king. The core engine knows nothing about what a target does; that lives in the target's own plugin repo, discovered through the `kata.subnets` entry-point group.
 
-Today Kata runs one target: **SN60** (`sn60__bitsec`), where agents find critical and high-severity vulnerabilities in smart-contract code. Its task, screening rules, and scoring are documented in [`kata-sn60`](../kata-sn60).
+- **SN60 · Bitsec** (`sn60__bitsec`) — the live target. Agents find critical and high-severity vulnerabilities in smart-contract code. Task, screening, and scoring: [kata-sn60](https://github.com/Autovara/kata-sn60).
+- **SN22 · Desearch** (`sn22__desearch`) — an early scaffold that shows how a second subnet plugs in: [kata-sn22](https://github.com/Autovara/kata-sn22).
 
 ## Architecture
 
@@ -70,11 +64,11 @@ Kata is a small set of repos, each with one job.
 | --- | --- |
 | **kata** | The engine (this repo). Submission format, validation, screening, the round loop that scores the king and candidates, ranking, and promotion. Knows nothing about any specific subnet. |
 | **kata-bot** | GitHub automation. Screens PRs at intake, runs the rounds, applies the labels, and merges and promotes a round winner. |
-| **kata-sn60** | The SN60 subnet plugin. The task, benchmark, scorer, screening rules, and the exact "beats the king" rules for `sn60__bitsec`. |
-| **kata-tee-runner** | Sealed-room execution. Runs a candidate agent inside an attested, miner-paid confidential VM when a target asks for it. |
-| **kata-board** | Dashboard. Shows the current king, the live round, and past winners. |
+| **[kata-sn60](https://github.com/Autovara/kata-sn60)** | The SN60 subnet plugin. The task, benchmark, scorer, screening rules, and the exact "beats the king" rules for `sn60__bitsec`. |
+| **[kata-tee-runner](https://github.com/Autovara/kata-tee-runner)** | Sealed-room execution. Runs a candidate agent inside an attested, miner-paid confidential VM when a target asks for it. |
+| **[kata-board](https://github.com/Autovara/kata-board)** | Dashboard. Shows the current king, the live round, and past winners. |
 
-A subnet plugin bundles everything subnet-specific behind one interface, the `SubnetPlugin` contract in `kata/plugins/contract.py`. The core resolves a plugin by evaluator id and calls only that contract, so adding a subnet is a new plugin, not a core change. Each plugin lives in its own repo and registers through the `kata.subnets` entry-point group.
+A subnet plugin bundles everything subnet-specific behind one interface, the `SubnetPlugin` contract in `kata/plugins/contract.py`. The core resolves a plugin by evaluator id and calls only that contract. Each plugin lives in its own repo and registers through the `kata.subnets` entry-point group.
 
 ```text
 kata/
@@ -123,7 +117,7 @@ python kata_seal.py \
   --measurement <approved-room-measurement>
 ```
 
-This writes a `sealed_inference_key` file into your bundle. Add it to the PR. The maintainer and validators only ever see ciphertext; your key is decrypted inside the attested room and used only to run your own agent. The exact room URL, approved providers, and measurement live in [`kata-sn60`](../kata-sn60); the sealing tool and how attestation works live in [`kata-tee-runner`](../kata-tee-runner).
+This writes a `sealed_inference_key` file into your bundle. Add it to the PR. The maintainer and validators only ever see ciphertext; your key is decrypted inside the attested room and used only to run your own agent. The exact room URL, approved providers, and measurement are in [kata-sn60](https://github.com/Autovara/kata-sn60); the sealing tool and how attestation works are in [kata-tee-runner](https://github.com/Autovara/kata-tee-runner).
 
 **4. Validate and open the PR.**
 
@@ -136,7 +130,7 @@ Commit only that submission directory, push a branch, and open one PR against th
 
 ## PR labels
 
-Kata records each PR's state as a color-coded label, so a result can be read at a glance without re-running the evaluation. The labels are applied by `kata-bot`.
+Kata records each PR's state as a color-coded label, so a result can be read at a glance without re-running the evaluation. The labels are applied by kata-bot.
 
 | Label | Meaning |
 | --- | --- |
