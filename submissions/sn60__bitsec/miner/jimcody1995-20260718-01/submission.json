@@ -1,0 +1,10 @@
+{
+  "schema_version": 2,
+  "subnet_pack": "sn60__bitsec",
+  "mode": "miner",
+  "submission_id": "jimcody1995-20260718-01",
+  "created_at": "2026-07-19T01:10:00+00:00",
+  "author": "jimcody1995",
+  "title": "Evidence-first DeepSeek depth miner",
+  "notes": "Static rank only (no probe findings). Map triage + three single-file deep audits + verify. DeepSeek-V3.2-TEE. Sol/Vy/Cairo/Rust."
+}
