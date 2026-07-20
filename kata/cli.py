@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Sequence
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from kata.promotion import bootstrap_lane_king, find_evaluator_pack_entry
@@ -35,13 +36,18 @@ from kata.submissions.workflow import (
     verify_submission_result,
 )
 
+try:
+    _KATA_VERSION = version("kata")
+except PackageNotFoundError:  # not installed (e.g. running from a source checkout)
+    _KATA_VERSION = "0+unknown"
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kata",
         description="Initialize and evaluate subnet-pack coding-agent competition lanes.",
     )
-    parser.add_argument("--version", action="version", version="kata 0.1.0")
+    parser.add_argument("--version", action="version", version=f"kata {_KATA_VERSION}")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_king_parser(subparsers)
@@ -684,8 +690,6 @@ def collect_changed_paths(
 
 
 def print_json(payload: dict[str, object]) -> None:
-    import json
-
     print(json.dumps(payload, indent=2))
 
 

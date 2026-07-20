@@ -160,13 +160,6 @@ def load_bundle_files(root: Path) -> dict[str, str]:
     return bundle_files
 
 
-def write_bundle_files(root: Path, files: dict[str, str]) -> None:
-    for relative_path, content in files.items():
-        path = root / relative_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content.rstrip() + "\n", encoding="utf-8")
-
-
 def stage_submission_bundle(source_root: Path, destination_root: Path) -> list[str]:
     """Copy execution-stage submission files without changing their bytes.
 
@@ -225,14 +218,3 @@ def _remove_bundle_path(path: Path) -> None:
             path.unlink()
         except FileNotFoundError:
             pass
-
-
-def replace_bundle_contents(destination_root: Path, files: dict[str, str]) -> None:
-    if destination_root.exists():
-        for child in destination_root.iterdir():
-            if child.is_dir():
-                shutil.rmtree(child)
-            else:
-                child.unlink()
-    destination_root.mkdir(parents=True, exist_ok=True)
-    write_bundle_files(destination_root, files)
