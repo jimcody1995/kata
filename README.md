@@ -17,9 +17,9 @@
 Kata's development runs on **Gittensor**, the open-source-software subnet on Bittensor (SN74). Gittensor coordinates the people who improve this repository and rewards their merged work.
 
 > [!TIP]
-> **Win a round, become the king, earn on-chain** — the whole reason to compete here:
+> **Win a challenge, become the king, earn on-chain** — the whole reason to compete here:
 > 1. Improve an agent and open a pull request.
-> 2. Win a round: beat the reigning king on the benchmark and get promoted.
+> 2. Win a challenge: beat the reigning king on the benchmark and get promoted.
 > 3. Gittensor rewards the promotion. A fresh king carries the most weight and decays over time, so staying on top means staying the best.
 
 You don't need to run Bittensor or join a Discord to take part. SN74 funds work on *this* repo, which is separate from the subnets Kata builds agents *for* (the targets below).
@@ -39,7 +39,7 @@ flowchart TD
     C["Contributor opens a PR<br/>one agent under submissions/"]
     BOT["kata-bot<br/>GitHub automation"]
     IN["1 · Intake<br/>screen → pending / review / invalid"]
-    RD["2 · Round<br/>scheduled · score the pending agents"]
+    RD["2 · Challenge<br/>scheduled · score the pending agents"]
     PROM["4 · Promote<br/>winner → new king in kings/"]
     BOARD["kata-board<br/>dashboard"]
 
@@ -82,14 +82,14 @@ flowchart TD
 
 One engine drives every subnet. The core in this repo is subnet-neutral: it runs the competition, and a per-subnet plugin fills in the task, the benchmark, and the scoring. Adding a subnet is a new plugin, not a core change.
 
-For any subnet, the competition is a "king of the hill" tournament run in **scheduled rounds**, not one duel per pull request:
+For any subnet, the competition is a "king of the hill" tournament run in **scheduled challenges**, not one duel per pull request:
 
 1. **Submit.** A contributor opens a pull request that adds exactly one agent.
 2. **Intake.** kata-bot screens the PR for shape and obvious cheating, then marks it `kata:pending`. No scoring yet.
-3. **Round.** On a schedule, a round runs. It locks the pending agents, scores the king once, then scores every candidate against that same fresh king score on the same secretly sampled problems.
+3. **Challenge.** On a schedule, a challenge runs. It locks the pending agents, scores the king once, then scores every candidate against that same fresh king score on the same secretly sampled problems.
 4. **Promote.** The candidates are ranked. The top one that beats the king is merged and becomes that subnet's new king.
 
-Because the king is re-scored fresh every round, a candidate is always measured against the king on the exact problems the king just faced. Different rounds use different problems, so an agent can't win by memorizing a fixed set.
+Because the king is re-scored fresh every challenge, a candidate is always measured against the king on the exact problems the king just faced. Different challenges use different problems, so an agent can't win by memorizing a fixed set.
 
 ## Targets
 
@@ -104,18 +104,18 @@ Kata is a small set of repos, each with one job.
 
 | Repo | Role |
 | --- | --- |
-| **kata** | The engine (this repo). Submission format, validation, screening, the round loop that scores the king and candidates, ranking, and promotion. Knows nothing about any specific subnet. |
-| **kata-bot** | GitHub automation. Screens PRs at intake, runs the rounds, applies the labels, and merges and promotes a round winner. |
+| **kata** | The engine (this repo). Submission format, validation, screening, the challenge loop that scores the king and candidates, ranking, and promotion. Knows nothing about any specific subnet. |
+| **kata-bot** | GitHub automation. Screens PRs at intake, runs the challenges, applies the labels, and merges and promotes a challenge winner. |
 | **[kata-sn60](https://github.com/Autovara/kata-sn60)** | The SN60 subnet plugin. The task, benchmark, scorer, screening rules, and the exact "beats the king" rules for `sn60__bitsec`. |
 | **[kata-tee-runner](https://github.com/Autovara/kata-tee-runner)** | Sealed-room execution. Runs a candidate agent inside an attested, miner-paid confidential VM when a target asks for it. |
-| **[kata-board](https://github.com/Autovara/kata-board)** | Dashboard. Shows the current king, the live round, and past winners. |
+| **[kata-board](https://github.com/Autovara/kata-board)** | Dashboard. Shows the current king, the live challenge, and past winners. |
 
 A subnet plugin bundles everything subnet-specific behind one interface, the `SubnetPlugin` contract in `kata/plugins/contract.py`. The core resolves a plugin by evaluator id and calls only that contract. Each plugin lives in its own repo and registers through the `kata.subnets` entry-point group.
 
 ```text
 kata/
   cli.py          command-line entry point
-  core/           subnet-neutral round orchestration
+  core/           subnet-neutral challenge orchestration
   plugins/        the SubnetPlugin contract, discovery, and registry
   submissions/    bundle layout, validation, workflow, rendering
   screening/      shared anti-cheat checks and plugin screening dispatch
@@ -175,9 +175,9 @@ Kata records each PR's state as a color-coded label, so a result can be read at 
 
 | Label | Meaning |
 | --- | --- |
-| `kata:pending` | Screened and waiting for the next round. |
-| `kata:executing` | Competing in the round that is running now. |
-| `kata:review` | Suspicious but not conclusive; held out of rounds until a maintainer clears it or you push a clean update. |
+| `kata:pending` | Screened and waiting for the next challenge. |
+| `kata:executing` | Competing in the challenge that is running now. |
+| `kata:review` | Suspicious but not conclusive; held out of challenges until a maintainer clears it or you push a clean update. |
 | `kata:stale` | Unchanged since it last competed; push an update to re-enter. |
 | `kata:losing` | Competed but did not beat the king; closed. |
 | `kata:invalid` | Failed screening or broke the one-open-PR rule; closed. |
@@ -200,11 +200,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and what-belongs-where.
 
 ## Repository layout
 
-- `kata/` — the engine: submissions, screening, core round, state, promotion, plugins, CLI.
+- `kata/` — the engine: submissions, screening, core challenge, state, promotion, plugins, CLI.
 - `lanes/` — registry and state for the registered competition targets.
 - `kings/` — the published current king per target and mode. This is the public source of truth for the best promoted agent.
 - `submissions/` — PR-submitted candidate bundles. A merged winner's bundle is cleared once it becomes the king.
-- `runs/` — round artifacts with reproducible provenance. Gitignored, not committed.
+- `runs/` — challenge artifacts with reproducible provenance. Gitignored, not committed.
 
 ## License
 

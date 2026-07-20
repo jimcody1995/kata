@@ -41,7 +41,7 @@ contribution workflow, see `docs/workflow.md`.
 ## What belongs where
 
 - Command line: `kata/cli.py`
-- Generic round evaluation and ranking: `kata/core/round.py`
+- Generic challenge evaluation and ranking: `kata/core/challenge.py`
 - Plugin contract, discovery, and registry: `kata/plugins/`
 - Submission bundle and PR workflow: `kata/submissions/`
 - Shared screening and anti-cheat dispatch: `kata/screening/`

@@ -6,6 +6,6 @@ the :class:`~kata.plugins.contract.SubnetPlugin` interface and shared by every s
 
 from __future__ import annotations
 
-from .round import RoundOutcome, ScoredVariant, run_plugin_round
+from .challenge import ChallengeOutcome, ScoredVariant, run_plugin_challenge
 
-__all__ = ["RoundOutcome", "ScoredVariant", "run_plugin_round"]
+__all__ = ["ChallengeOutcome", "ScoredVariant", "run_plugin_challenge"]

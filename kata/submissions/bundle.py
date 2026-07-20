@@ -179,7 +179,7 @@ def stage_submission_bundle(source_root: Path, destination_root: Path) -> list[s
     # with a single atomic rename. The previous king is moved aside first (and
     # restored if the swap fails), so a crash mid-copy can never leave an empty or
     # half-copied king directory -- which would raise "king artifact is not seeded"
-    # on the next round and freeze the competition.
+    # on the next challenge and freeze the competition.
     staging_root = destination_root.parent / f".{destination_root.name}.staging.{os.getpid()}"
     _remove_bundle_path(staging_root)
     try:

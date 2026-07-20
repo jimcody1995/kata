@@ -1,11 +1,11 @@
-"""Subnet-agnostic round orchestrator.
+"""Subnet-agnostic challenge orchestrator.
 
-This is the core King-of-the-Hill round, driven entirely through the
+This is the core King-of-the-Hill challenge, driven entirely through the
 :class:`SubnetPlugin` interface: sample the problems, score the king once, score each
 candidate, rank them with the plugin's comparator, and pick the top challenger that
 beats the king. It knows nothing about any specific subnet.
 
-Each subnet's round runner delegates here; the core knows nothing about any specific
+Each subnet's challenge runner delegates here; the core knows nothing about any specific
 subnet.
 """
 
@@ -34,8 +34,8 @@ class ScoredVariant:
 
 
 @dataclass(frozen=True)
-class RoundOutcome:
-    """The generic result of one round -- what the core needs, subnet-agnostic."""
+class ChallengeOutcome:
+    """The generic result of one challenge -- what the core needs, subnet-agnostic."""
 
     problems: ProblemSet
     benchmark_identity: str
@@ -75,7 +75,7 @@ def _score_variant(
     return ScoredVariant(label=label, agent_path=agent_path, card=card)
 
 
-def run_plugin_round(
+def run_plugin_challenge(
     plugin: SubnetPlugin,
     *,
     king_agent_path: str | None,
@@ -86,8 +86,8 @@ def run_plugin_round(
     score_king: bool = True,
     progress=None,
     problems: ProblemSet = None,
-) -> RoundOutcome:
-    """Run one King-of-the-Hill round through ``plugin`` and return a generic outcome.
+) -> ChallengeOutcome:
+    """Run one King-of-the-Hill challenge through ``plugin`` and return a generic outcome.
 
     ``candidates`` is a list of ``(label, agent_path)``. The king is scored once (unless
     ``score_king`` is False -- the lazy-king optimization skips it when no candidate
@@ -136,7 +136,7 @@ def run_plugin_round(
         None,
     )
 
-    return RoundOutcome(
+    return ChallengeOutcome(
         problems=problems,
         benchmark_identity=identity,
         scoring_profile=plugin.scoring_profile,

@@ -39,7 +39,7 @@ from kata.state.lanes import (
 )
 
 
-def test_write_and_load_evaluator_lane_state_round_trip(tmp_path: Path) -> None:
+def test_write_and_load_evaluator_lane_state_challenge_trip(tmp_path: Path) -> None:
     lane = EvaluatorLaneMetadata(
         schema_version=LANE_METADATA_SCHEMA_VERSION,
         lane_id="sn60__bitsec",

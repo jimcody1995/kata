@@ -66,7 +66,7 @@ def test_mirror_public_king_artifact_publishes_source_bytes_verbatim(tmp_path: P
     source.mkdir()
     # Non-canonical bytes (no trailing newline, the common case). A normalizing
     # write would change these and break the sealed_inference_key binding, which
-    # the room re-checks over the king's bytes on every re-scoring round.
+    # the room re-checks over the king's bytes on every re-scoring challenge.
     agent = b"def agent_main(project_dir=None, inference_api=None):\n    return {'vulns': []}"
     metadata = b'{"schema_version":2,"subnet_pack":"sn60__bitsec","mode":"miner"}'
     sealed = b"deadbeef" * 8
@@ -208,7 +208,7 @@ def test_promote_lane_king_rolls_back_king_and_state_on_write_failure(
     assert [p.name for p in king_root.parent.iterdir() if p.name.startswith(".")] == []
 
 
-def test_submission_metadata_round_trips_subnet_pack_field(tmp_path: Path) -> None:
+def test_submission_metadata_challenge_trips_subnet_pack_field(tmp_path: Path) -> None:
     metadata_path = tmp_path / "submission.json"
     metadata = SubmissionMetadata(
         schema_version=2,

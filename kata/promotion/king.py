@@ -179,7 +179,7 @@ def _publish_baseline_public_current(
             "artifact_hash": king.current_king_artifact_hash,
             "promoted_at": king.promotion_timestamp,
         },
-        "latest_round": None,
+        "latest_challenge": None,
         "benchmark": benchmark if isinstance(benchmark, dict) else {},
         "dashboard_url": dashboard_url if isinstance(dashboard_url, str) else None,
     }
@@ -319,7 +319,7 @@ def promote_lane_king(
             challenge_run_id=summary.run_id,
             candidate_artifact_path=verification.submission_path,
             candidate_artifact_hash=verification.candidate_artifact_hash,
-            # Hash the published king the way the subnet's round does, so king_is_current
+            # Hash the published king the way the subnet's challenge does, so king_is_current
             # stays true even for non-normalized submissions.
             artifact_hasher=plugin.hash_bundle if plugin is not None else hash_submission_bundle,
         )

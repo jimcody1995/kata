@@ -49,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_king_parser(subparsers)
     _add_lane_parsers(subparsers)
     _add_submission_parsers(subparsers)
-    _add_round_parser(subparsers)
+    _add_challenge_parser(subparsers)
     # Subnet plugins contribute their own subcommands (e.g. SN60's `sn60-baseline`).
     from kata.plugins.discovery import load_builtin_plugins
     from kata.plugins.registry import all_plugins
@@ -297,65 +297,65 @@ def _add_submission_parsers(subparsers) -> None:
     submission_inspect.set_defaults(handler=handle_submission_inspect)
 
 
-def _add_round_parser(subparsers) -> None:
-    round_cmd = subparsers.add_parser(
-        "round",
+def _add_challenge_parser(subparsers) -> None:
+    challenge_cmd = subparsers.add_parser(
+        "challenge",
         help="Score the king against several candidates on the same projects and rank them.",
     )
-    round_cmd.add_argument(
+    challenge_cmd.add_argument(
         "--evaluator",
         required=True,
-        help="Subnet evaluator id whose plugin runs the round.",
+        help="Subnet evaluator id whose plugin runs the challenge.",
     )
-    round_cmd.add_argument(
+    challenge_cmd.add_argument(
         "--king-path",
         required=True,
         help="Path to the current lane king artifact.",
     )
-    round_cmd.add_argument(
+    challenge_cmd.add_argument(
         "--candidate",
         action="append",
         required=True,
         metavar="ID=PATH",
         help="A competing candidate as '<submission-id>=<artifact-path>'. Repeat per entrant.",
     )
-    round_cmd.add_argument(
-        "--round-cache-path",
+    challenge_cmd.add_argument(
+        "--challenge-cache-path",
         default=None,
-        help="Optional evaluator-owned cache path for this round.",
+        help="Optional evaluator-owned cache path for this challenge.",
     )
-    round_cmd.add_argument(
+    challenge_cmd.add_argument(
         "--output-root",
         default=None,
-        help="Optional base directory for round artifacts. Defaults to ./runs.",
+        help="Optional base directory for challenge artifacts. Defaults to ./runs.",
     )
-    round_cmd.add_argument(
-        "--round-progress-path",
+    challenge_cmd.add_argument(
+        "--challenge-progress-path",
         default=None,
         help="Optional path to publish a live per-candidate progress snapshot for the dashboard.",
     )
-    round_cmd.add_argument(
-        "--round-config-json",
+    challenge_cmd.add_argument(
+        "--challenge-config-json",
         default=None,
         help=(
-            "Optional JSON object merged into the selected evaluator's round configuration. "
+            "Optional JSON object merged into the selected evaluator's challenge configuration. "
             "Used by multi-lane operators to keep plugin settings lane-scoped."
         ),
     )
-    round_cmd.add_argument(
+    challenge_cmd.add_argument(
         "--json",
         action="store_true",
         help="Emit machine-readable JSON instead of text.",
     )
-    # Each registered subnet plugin contributes its own namespaced round arguments
-    # (e.g. SN60's --sn60-* flags); the core round handler stays subnet-blind.
+    # Each registered subnet plugin contributes its own namespaced challenge arguments
+    # (e.g. SN60's --sn60-* flags); the core challenge handler stays subnet-blind.
     from kata.plugins.discovery import load_builtin_plugins
     from kata.plugins.registry import all_plugins
 
     load_builtin_plugins()
     for plugin in all_plugins():
-        plugin.add_round_arguments(round_cmd)
-    round_cmd.set_defaults(handler=handle_round)
+        plugin.add_challenge_arguments(challenge_cmd)
+    challenge_cmd.set_defaults(handler=handle_challenge)
 
 
 def handle_king_promote(args: argparse.Namespace) -> int:
@@ -456,42 +456,42 @@ def handle_submission_inspect(args: argparse.Namespace) -> int:
     return 0 if result.action == "evaluate" else 2
 
 
-def parse_round_candidate(spec: str) -> tuple[str, str]:
+def parse_challenge_candidate(spec: str) -> tuple[str, str]:
     submission_id, separator, artifact_path = spec.partition("=")
     if not separator or not submission_id.strip() or not artifact_path.strip():
         raise SystemExit(f"--candidate must be '<submission-id>=<path>', got: {spec!r}")
     return submission_id.strip(), artifact_path.strip()
 
 
-def handle_round(args: argparse.Namespace) -> int:
+def handle_challenge(args: argparse.Namespace) -> int:
     from kata.plugins.discovery import plugin_for_evaluator
 
-    candidates = [parse_round_candidate(spec) for spec in args.candidate]
+    candidates = [parse_challenge_candidate(spec) for spec in args.candidate]
     plugin = plugin_for_evaluator(args.evaluator)
     if plugin is None:
         raise SystemExit(f"No subnet plugin is registered for evaluator '{args.evaluator}'.")
-    config = plugin.build_round_config(args)
-    if args.round_cache_path:
-        config["round_cache_path"] = str(Path(args.round_cache_path).expanduser().resolve())
-    if args.round_config_json:
+    config = plugin.build_challenge_config(args)
+    if args.challenge_cache_path:
+        config["challenge_cache_path"] = str(Path(args.challenge_cache_path).expanduser().resolve())
+    if args.challenge_config_json:
         try:
-            overrides = json.loads(args.round_config_json)
+            overrides = json.loads(args.challenge_config_json)
         except json.JSONDecodeError as exc:
-            raise SystemExit(f"--round-config-json must be valid JSON: {exc}") from exc
+            raise SystemExit(f"--challenge-config-json must be valid JSON: {exc}") from exc
         if not isinstance(overrides, dict):
-            raise SystemExit("--round-config-json must be a JSON object")
+            raise SystemExit("--challenge-config-json must be a JSON object")
         config.update(overrides)
-    result = plugin.run_round(
+    result = plugin.run_challenge(
         king_agent_path=args.king_path,
         candidates=candidates,
         config=config,
         output_root=args.output_root or "runs",
-        progress_path=args.round_progress_path,
+        progress_path=args.challenge_progress_path,
     )
     if args.json:
-        print_json(plugin.round_result_json(result))
+        print_json(plugin.challenge_result_json(result))
     else:
-        print(plugin.render_round_text(result))
+        print(plugin.render_challenge_text(result))
     return 0
 
 

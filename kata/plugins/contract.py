@@ -124,7 +124,7 @@ class SubnetPlugin(ABC):
 
     @abstractmethod
     def sample_problems(self, *, seed: str, config: dict[str, Any]) -> ProblemSet:
-        """Produce this round's task set (deterministic in ``seed`` where possible)."""
+        """Produce this challenge's task set (deterministic in ``seed`` where possible)."""
 
     @abstractmethod
     def benchmark_identity(self, problems: ProblemSet) -> str:
@@ -169,7 +169,7 @@ class SubnetPlugin(ABC):
     def hash_bundle(self, path) -> str:
         """Hash a king/candidate bundle for king-currency checks.
 
-        Must match how the subnet hashes bundles during a round so a published king stays
+        Must match how the subnet hashes bundles during a challenge so a published king stays
         recognized as current. Default: the generic submission-bundle hash.
         """
         from pathlib import Path
@@ -190,9 +190,9 @@ class SubnetPlugin(ABC):
         return []
 
     def load_challenge_summary(self, path):
-        """Load this subnet's challenge/round summary from ``path``.
+        """Load this subnet's challenge/challenge summary from ``path``.
 
-        The summary is the subnet's native round result; the generic verify/promote path
+        The summary is the subnet's native challenge result; the generic verify/promote path
         reads only common attributes off it. Default: unsupported.
         """
         raise NotImplementedError(
@@ -217,22 +217,22 @@ class SubnetPlugin(ABC):
         """
         return [], []
 
-    def add_round_arguments(self, parser) -> None:
-        """Register this subnet's ``kata round`` CLI arguments. Default: none."""
+    def add_challenge_arguments(self, parser) -> None:
+        """Register this subnet's ``kata challenge`` CLI arguments. Default: none."""
 
-    def build_round_config(self, args) -> dict:
-        """Build the round config dict from parsed CLI args. Default: empty."""
+    def build_challenge_config(self, args) -> dict:
+        """Build the challenge config dict from parsed CLI args. Default: empty."""
         return {}
 
-    def round_result_json(self, result) -> dict:
-        """Serialize a round result to the CLI JSON payload. Default: empty."""
+    def challenge_result_json(self, result) -> dict:
+        """Serialize a challenge result to the CLI JSON payload. Default: empty."""
         return {}
 
-    def render_round_text(self, result) -> str:
-        """Render a round result as human-readable text. Default: repr."""
+    def render_challenge_text(self, result) -> str:
+        """Render a challenge result as human-readable text. Default: repr."""
         return str(result)
 
-    def run_round(
+    def run_challenge(
         self,
         *,
         king_agent_path: str,
@@ -242,20 +242,20 @@ class SubnetPlugin(ABC):
         run_id: str | None = None,
         progress_path: str | None = None,
     ) -> object:
-        """Run one competition round for this subnet and return its result.
+        """Run one competition challenge for this subnet and return its result.
 
-        The default drives the generic orchestrator and returns a ``RoundOutcome``;
+        The default drives the generic orchestrator and returns a ``ChallengeOutcome``;
         subnets that produce their own proof/summary files override this
         to write them and return their native result. Imported lazily to avoid a
-        module-load cycle with ``kata.core.round``.
+        module-load cycle with ``kata.core.challenge``.
         """
-        from kata.core.round import run_plugin_round
+        from kata.core.challenge import run_plugin_challenge
 
-        return run_plugin_round(
+        return run_plugin_challenge(
             self,
             king_agent_path=king_agent_path,
             candidates=candidates,
             config=config,
             output_root=output_root,
-            seed=run_id or "round",
+            seed=run_id or "challenge",
         )
