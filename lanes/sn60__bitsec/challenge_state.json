@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "candidate_submission_id": "jimcody1995-20260719-01",
-  "candidate_artifact_hash": "6c0090154f48fde35d3c83bc9edcc16feb4ac39617165615c076a41c2634e34d",
-  "king_artifact_hash": "ba6c31eab2c4f0f1d00889152663037d65bbc632a570e38336905ef503ed47e8",
+  "candidate_submission_id": "Dexterity104-20260720-01",
+  "candidate_artifact_hash": "67b57dbe4cc69eef8108a5baf52601fb64fc5177bea03c0b9e185b6101878b72",
+  "king_artifact_hash": "6c0090154f48fde35d3c83bc9edcc16feb4ac39617165615c076a41c2634e34d",
   "screening_result": {
     "schema_version": 1,
-    "run_id": "sn60-challenge-20260720T130617Z-d91cd3-pr-162",
+    "run_id": "sn60-challenge-20260720T214257Z-b126bb-pr-165",
     "status": "passed",
     "stage": "challenge",
-    "artifact_path": "/srv/kata-bot/work/kata-bot-promote-gqhdpze4/kata-bot-kata-default-w7sml742/submissions/sn60__bitsec/miner/jimcody1995-20260719-01",
-    "artifact_hash": "6c0090154f48fde35d3c83bc9edcc16feb4ac39617165615c076a41c2634e34d",
+    "artifact_path": "/srv/kata-bot/work/kata-bot-promote-3p9nfpzq/kata-bot-kata-default-uq64sj7j/submissions/sn60__bitsec/miner/Dexterity104-20260720-01",
+    "artifact_hash": "67b57dbe4cc69eef8108a5baf52601fb64fc5177bea03c0b9e185b6101878b72",
     "project_key": null,
     "report_path": null,
     "result_path": null,
@@ -24,21 +24,21 @@
       "sandbox_commit": "069ae1e2f152370fa97f3397d8a8f8aed5a78539",
       "scorer_version": "ScaBenchScorerV2"
     },
-    "created_at": "2026-07-20T14:44:42.939136+00:00"
+    "created_at": "2026-07-20T23:19:56.318703+00:00"
   },
   "selected_project_keys": [
-    "code4rena_forte-float128-solidity-library_2025_04",
-    "sherlock_symmio_2025_03",
+    "code4rena_virtuals-protocol_2025_08",
+    "sherlock_axion_2025_01",
     "code4rena_lambowin_2025_02",
+    "code4rena_starknet-perpetual_2025_06",
     "code4rena_loopfi_2025_02",
-    "code4rena_next-generation_2025_05",
-    "cantina_generic-money_2025_11",
-    "code4rena_fenix-finance-invitational_2024_10"
+    "cantina_smart-contract-audit-of-tn-contracts_2025_08",
+    "code4rena_mantra-dex_2025_03"
   ],
   "validator_replica_count": 1,
   "run_ids": [
-    "sn60-challenge-20260720T130617Z-d91cd3-pr-162"
+    "sn60-challenge-20260720T214257Z-b126bb-pr-165"
   ],
-  "freshness_fingerprint": "69b17e70ab1261551ae9493eb2dbcb61b0be3ac486d81f67434b6c69c67843f2",
-  "updated_at": "2026-07-20T14:45:29.901707+00:00"
+  "freshness_fingerprint": "d10c7f39f1ba87d2d0cda39026c516b66b34c89bb1a015888002ac39dfc97b8f",
+  "updated_at": "2026-07-20T23:21:26.400963+00:00"
 }
