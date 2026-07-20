@@ -51,7 +51,7 @@ def resolve_submission_descriptor(
         )
         return None, reasons
 
-    repo_pack = parts[1]
+    subnet_pack = parts[1]
     mode = parts[2]
     submission_id = parts[3]
     if mode not in SUPPORTED_SUBMISSION_MODES:
@@ -61,7 +61,7 @@ def resolve_submission_descriptor(
     return (
         SubmissionDescriptor(
             root=root,
-            repo_pack=repo_pack,
+            subnet_pack=subnet_pack,
             mode=mode,
             submission_id=submission_id,
             agent_path=root / SUBMISSION_AGENT_FILENAME,
@@ -79,7 +79,7 @@ def load_submission_metadata(path: Path) -> SubmissionMetadata:
     try:
         return SubmissionMetadata(
             schema_version=int(payload["schema_version"]),
-            repo_pack=read_submission_subnet_pack(payload),
+            subnet_pack=read_submission_subnet_pack(payload),
             mode=str(payload["mode"]),
             submission_id=str(payload["submission_id"]),
             created_at=str(payload["created_at"]),
@@ -102,7 +102,6 @@ def read_submission_subnet_pack(payload: dict[str, object]) -> str:
 
 def write_submission_metadata(path: Path, metadata: SubmissionMetadata) -> None:
     payload = asdict(metadata)
-    payload["subnet_pack"] = payload.pop("repo_pack")
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 

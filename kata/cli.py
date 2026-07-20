@@ -126,13 +126,13 @@ def _add_lane_parsers(subparsers) -> None:
     lane_init.add_argument("--lane-id", required=True, help="Lane id, e.g. sn60__bitsec.")
     lane_init.add_argument(
         "--subnet-pack",
-        dest="repo_pack",
+        dest="subnet_pack",
         default=None,
         help="Subnet pack id. Defaults to lane id.",
     )
     lane_init.add_argument(
         "--repo-pack",
-        dest="repo_pack",
+        dest="subnet_pack",
         default=None,
         help="Deprecated alias for --subnet-pack.",
     )
@@ -204,12 +204,12 @@ def _add_submission_parsers(subparsers) -> None:
     submission_pack = submission_init.add_mutually_exclusive_group(required=True)
     submission_pack.add_argument(
         "--subnet-pack",
-        dest="repo_pack",
+        dest="subnet_pack",
         help="Target subnet pack id.",
     )
     submission_pack.add_argument(
         "--repo-pack",
-        dest="repo_pack",
+        dest="subnet_pack",
         help="Deprecated alias for --subnet-pack.",
     )
     submission_init.add_argument(
@@ -424,7 +424,7 @@ def handle_king_bootstrap(args: argparse.Namespace) -> int:
 
 def handle_submission_init(args: argparse.Namespace) -> int:
     submission_dir = init_submission(
-        repo_pack=args.repo_pack,
+        subnet_pack=args.subnet_pack,
         mode=args.mode,
         submission_id=args.submission_id,
         output_root=args.output_root,
@@ -505,7 +505,7 @@ def handle_lane_init(args: argparse.Namespace) -> int:
     metadata = EvaluatorLaneMetadata(
         schema_version=LANE_METADATA_SCHEMA_VERSION,
         lane_id=args.lane_id,
-        repo_pack=args.repo_pack or args.lane_id,
+        subnet_pack=args.subnet_pack or args.lane_id,
         mode=args.mode,
         evaluator_id=args.evaluator_id,
         evaluator_policy_version=args.policy_version,
@@ -532,8 +532,7 @@ def handle_lane_list(args: argparse.Namespace) -> int:
                 "packs": [
                     {
                         "lane_id": pack.lane_id,
-                        "subnet_pack": pack.repo_pack,
-                        "repo_pack": pack.repo_pack,
+                        "subnet_pack": pack.subnet_pack,
                         "mode": pack.mode,
                         "evaluator_id": pack.evaluator_id,
                         "active": pack.active,

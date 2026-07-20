@@ -28,7 +28,7 @@ PROMOTION_RECORD_SCHEMA_VERSION = 1
 @dataclass(frozen=True)
 class PackRegistryEntry:
     lane_id: str
-    repo_pack: str
+    subnet_pack: str
     mode: str
     evaluator_id: str
     active: bool
@@ -45,7 +45,7 @@ class PackRegistry:
 class EvaluatorLaneMetadata:
     schema_version: int
     lane_id: str
-    repo_pack: str
+    subnet_pack: str
     mode: str
     evaluator_id: str
     evaluator_policy_version: str
@@ -151,7 +151,7 @@ def upsert_pack_registry_entry(
     registry = load_pack_registry(public_root=public_root)
     entry = PackRegistryEntry(
         lane_id=metadata.lane_id,
-        repo_pack=metadata.repo_pack,
+        subnet_pack=metadata.subnet_pack,
         mode=metadata.mode,
         evaluator_id=metadata.evaluator_id,
         active=metadata.active,
@@ -183,7 +183,7 @@ def sync_pack_registry(*, public_root: str | None = None) -> PackRegistry:
             packs.append(
                 PackRegistryEntry(
                     lane_id=metadata.lane_id,
-                    repo_pack=metadata.repo_pack,
+                    subnet_pack=metadata.subnet_pack,
                     mode=metadata.mode,
                     evaluator_id=metadata.evaluator_id,
                     active=metadata.active,
@@ -382,19 +382,11 @@ def write_json_dataclass(path: Path, value) -> Path:
 
 
 def serialize_pack_registry(registry: PackRegistry) -> dict[str, object]:
-    payload = asdict(registry)
-    packs = payload.get("packs")
-    if isinstance(packs, list):
-        for pack in packs:
-            if isinstance(pack, dict):
-                pack["subnet_pack"] = pack.pop("repo_pack")
-    return payload
+    return asdict(registry)
 
 
 def serialize_lane_metadata(metadata: EvaluatorLaneMetadata) -> dict[str, object]:
-    payload = asdict(metadata)
-    payload["subnet_pack"] = payload.pop("repo_pack")
-    return payload
+    return asdict(metadata)
 
 
 def read_json(path: Path) -> dict[str, object]:
@@ -417,7 +409,7 @@ def parse_pack_registry(payload: dict[str, object]) -> PackRegistry:
         packs.append(
             PackRegistryEntry(
                 lane_id=lane_id,
-                repo_pack=read_subnet_pack_field(entry),
+                subnet_pack=read_subnet_pack_field(entry),
                 mode=str(entry["mode"]),
                 evaluator_id=str(entry["evaluator_id"]),
                 active=require_bool(entry["active"], field_name="active"),
@@ -436,7 +428,7 @@ def parse_lane_metadata(payload: dict[str, object]) -> EvaluatorLaneMetadata:
     return EvaluatorLaneMetadata(
         schema_version=int(payload["schema_version"]),
         lane_id=lane_id,
-        repo_pack=read_subnet_pack_field(payload),
+        subnet_pack=read_subnet_pack_field(payload),
         mode=str(payload["mode"]),
         evaluator_id=str(payload["evaluator_id"]),
         evaluator_policy_version=str(payload["evaluator_policy_version"]),

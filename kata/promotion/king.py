@@ -53,7 +53,7 @@ class LaneBootstrapResult:
 
 
 def find_evaluator_pack_entry(
-    repo_pack: str,
+    subnet_pack: str,
     mode: str,
     *,
     public_root: str | None = None,
@@ -63,21 +63,22 @@ def find_evaluator_pack_entry(
     # reason.
     registry = load_pack_registry(public_root=public_root)
     for pack in registry.packs:
-        if pack.repo_pack == repo_pack and pack.mode == mode:
+        if pack.subnet_pack == subnet_pack and pack.mode == mode:
             return pack
     return None
 
 
 def validate_submission_lane(
-    repo_pack: str,
+    subnet_pack: str,
     mode: str,
     *,
     public_root: str | None = None,
 ) -> list[str]:
-    entry = find_evaluator_pack_entry(repo_pack, mode, public_root=public_root)
+    entry = find_evaluator_pack_entry(subnet_pack, mode, public_root=public_root)
     if entry is None:
         return [
-            f"No evaluator-backed lane is registered in the pack registry for `{repo_pack}/{mode}`."
+            "No evaluator-backed lane is registered in the pack registry for "
+            f"`{subnet_pack}/{mode}`."
         ]
     if not entry.active:
         return [f"Evaluator-backed lane is not active in the pack registry: {entry.lane_id}"]
@@ -87,7 +88,7 @@ def validate_submission_lane(
 def resolve_lane_king_hash(
     lane_id: str,
     *,
-    repo_pack: str,
+    subnet_pack: str,
     mode: str,
     public_root: str | None = None,
     artifact_hasher: Callable[[Path], str] = hash_submission_bundle,
@@ -102,7 +103,9 @@ def resolve_lane_king_hash(
         king = load_lane_king_state(lane_id, public_root=public_root)
         if king.current_king_artifact_hash:
             return king.current_king_artifact_hash
-    king_root = resolve_public_king_root(public_root=public_root, repo_pack=repo_pack, mode=mode)
+    king_root = resolve_public_king_root(
+        public_root=public_root, subnet_pack=subnet_pack, mode=mode
+    )
     if (king_root / SUBMISSION_AGENT_FILENAME).exists():
         return artifact_hasher(king_root)
     return None
@@ -110,14 +113,14 @@ def resolve_lane_king_hash(
 
 def resolve_lane_king_artifact(metadata: SubmissionMetadata) -> tuple[str, str]:
     """Resolve (lane_id, king_artifact_path) for a lane duel from the pack registry."""
-    entry = find_evaluator_pack_entry(metadata.repo_pack, metadata.mode)
+    entry = find_evaluator_pack_entry(metadata.subnet_pack, metadata.mode)
     if entry is None:
         raise ValueError(
-            f"No evaluator-backed lane is registered for `{metadata.repo_pack}/{metadata.mode}`."
+            f"No evaluator-backed lane is registered for `{metadata.subnet_pack}/{metadata.mode}`."
         )
     king_root = resolve_public_king_root(
         public_root=None,
-        repo_pack=metadata.repo_pack,
+        subnet_pack=metadata.subnet_pack,
         mode=metadata.mode,
     )
     if not (king_root / SUBMISSION_AGENT_FILENAME).exists():
@@ -169,13 +172,13 @@ def _publish_baseline_public_current(
     payload = {
         "schema_version": 1,
         "updated_at": king.updated_at,
-        "active_pack": entry.repo_pack,
+        "active_pack": entry.subnet_pack,
         "active_mode": entry.mode,
         "current_king": {
             "author": None,
             "submission_id": king.current_king_submission_id,
             "source_pull_request": None,
-            "path": f"kings/{entry.repo_pack}/{entry.mode}",
+            "path": f"kings/{entry.subnet_pack}/{entry.mode}",
             "artifact_hash": king.current_king_artifact_hash,
             "promoted_at": king.promotion_timestamp,
         },
@@ -234,7 +237,7 @@ def bootstrap_lane_king(
     decision = screen_submission(
         submission_root=root,
         public_root=resolve_kata_root(public_root),
-        repo_pack=entry.repo_pack,
+        subnet_pack=entry.subnet_pack,
         mode=entry.mode,
         check_current_king=False,
     )
@@ -250,7 +253,7 @@ def bootstrap_lane_king(
     source_hash = plugin.hash_bundle(root)
     published = publish_public_king(
         public_root=str(resolve_kata_root(public_root)),
-        repo_pack=entry.repo_pack,
+        subnet_pack=entry.subnet_pack,
         mode=entry.mode,
         submission_id=baseline_id.strip(),
         challenge_run_id=f"baseline:{baseline_id.strip()}",
@@ -294,7 +297,7 @@ def promote_lane_king(
 
     kata_root = str(resolve_kata_root(public_root))
     king_root = resolve_public_king_root(
-        public_root=kata_root, repo_pack=verification.repo_pack, mode=verification.mode
+        public_root=kata_root, subnet_pack=verification.subnet_pack, mode=verification.mode
     )
     state_path = lane_king_state_path(entry.lane_id, public_root=public_root)
 
@@ -313,7 +316,7 @@ def promote_lane_king(
     try:
         published = publish_public_king(
             public_root=kata_root,
-            repo_pack=verification.repo_pack,
+            subnet_pack=verification.subnet_pack,
             mode=verification.mode,
             submission_id=verification.submission_id,
             challenge_run_id=summary.run_id,

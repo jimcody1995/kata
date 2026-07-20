@@ -7,7 +7,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class SubmissionMetadata:
     schema_version: int
-    repo_pack: str
+    subnet_pack: str
     mode: str
     submission_id: str
     created_at: str
@@ -19,7 +19,7 @@ class SubmissionMetadata:
 @dataclass(frozen=True)
 class SubmissionDescriptor:
     root: Path
-    repo_pack: str
+    subnet_pack: str
     mode: str
     submission_id: str
     agent_path: Path
@@ -30,7 +30,7 @@ class SubmissionDescriptor:
 @dataclass(frozen=True)
 class SubmissionValidationResult:
     submission_path: str
-    repo_pack: str | None
+    subnet_pack: str | None
     mode: str | None
     submission_id: str | None
     agent_path: str | None
@@ -63,7 +63,7 @@ class SubmissionCandidateValidation:
 class SubmissionVerificationResult:
     submission_path: str
     challenge_summary_path: str
-    repo_pack: str
+    subnet_pack: str
     mode: str
     submission_id: str
     candidate_artifact_hash: str
@@ -84,7 +84,7 @@ class SubmissionVerificationResult:
 class PullRequestInspectionResult:
     action: str
     submission_path: str | None
-    repo_pack: str | None
+    subnet_pack: str | None
     mode: str | None
     submission_id: str | None
     changed_paths: list[str]
@@ -97,7 +97,7 @@ class SubmissionDecisionResult:
     action: str
     submission_path: str
     challenge_summary_path: str
-    repo_pack: str
+    subnet_pack: str
     mode: str
     submission_id: str
     reason: str

@@ -18,7 +18,7 @@ KING_METADATA_FILENAME = "king.json"
 
 @dataclass(frozen=True)
 class PublicKingMetadata:
-    repo_pack: str
+    subnet_pack: str
     mode: str
     submission_id: str
     challenge_run_id: str
@@ -42,20 +42,20 @@ def resolve_kata_root(public_root: str | None = None) -> Path:
     return KATA_REPO_ROOT.resolve()
 
 
-def resolve_public_king_root(*, public_root: str | None, repo_pack: str, mode: str) -> Path:
-    return resolve_kata_root(public_root) / PUBLIC_KINGS_DIRNAME / repo_pack / mode
+def resolve_public_king_root(*, public_root: str | None, subnet_pack: str, mode: str) -> Path:
+    return resolve_kata_root(public_root) / PUBLIC_KINGS_DIRNAME / subnet_pack / mode
 
 
 def mirror_public_king_artifact(
     *,
     public_root: str | None,
-    repo_pack: str,
+    subnet_pack: str,
     mode: str,
     artifact_path: str,
 ) -> Path:
     king_root = resolve_public_king_root(
         public_root=public_root,
-        repo_pack=repo_pack,
+        subnet_pack=subnet_pack,
         mode=mode,
     )
     candidate_root = Path(artifact_path).expanduser().resolve()
@@ -74,7 +74,7 @@ def mirror_public_king_artifact(
 def publish_public_king(
     *,
     public_root: str,
-    repo_pack: str,
+    subnet_pack: str,
     mode: str,
     submission_id: str,
     challenge_run_id: str,
@@ -84,7 +84,7 @@ def publish_public_king(
 ) -> PublishedKing:
     king_root = mirror_public_king_artifact(
         public_root=public_root,
-        repo_pack=repo_pack,
+        subnet_pack=subnet_pack,
         mode=mode,
         artifact_path=candidate_artifact_path,
     )
@@ -94,7 +94,7 @@ def publish_public_king(
     # hasher's file set ever diverges from the source snapshot.
     published_hash = artifact_hasher(king_root)
     metadata = PublicKingMetadata(
-        repo_pack=repo_pack,
+        subnet_pack=subnet_pack,
         mode=mode,
         submission_id=submission_id,
         challenge_run_id=challenge_run_id,

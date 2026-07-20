@@ -32,7 +32,7 @@ def validate_changed_paths(
 ) -> ChangedPathValidation:
     expected_prefix = (
         Path(SUBMISSIONS_DIRNAME)
-        / descriptor.repo_pack
+        / descriptor.subnet_pack
         / descriptor.mode
         / descriptor.submission_id
     ).as_posix() + "/"
@@ -75,7 +75,7 @@ def validate_submission_metadata(
             "Unsupported submission schema version: "
             f"{metadata.schema_version}. Expected {SUBMISSION_SCHEMA_VERSION}."
         )
-    if metadata.repo_pack != descriptor.repo_pack:
+    if metadata.subnet_pack != descriptor.subnet_pack:
         reasons.append("submission.json subnet_pack does not match the submission path.")
     if metadata.mode != descriptor.mode:
         reasons.append("submission.json mode does not match the submission path.")
@@ -99,7 +99,7 @@ def validate_submission_candidate(
             submission_root=submission_root,
             public_root=Path(public_root).expanduser().resolve() if public_root else None,
             mode=metadata.mode,
-            repo_pack=metadata.repo_pack,
+            subnet_pack=metadata.subnet_pack,
         )
         screening_status = screening_decision.status
         screening_review_reasons = [

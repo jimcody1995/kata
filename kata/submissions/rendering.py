@@ -14,8 +14,8 @@ from kata.submissions.models import (
 def render_submission_validation(result: SubmissionValidationResult) -> str:
     lines: list[str] = []
     lines.append(f"Submission: {result.submission_path}")
-    if result.repo_pack:
-        lines.append(f"Subnet pack: {result.repo_pack}")
+    if result.subnet_pack:
+        lines.append(f"Subnet pack: {result.subnet_pack}")
     if result.mode:
         lines.append(f"Mode: {result.mode}")
     if result.submission_id:
@@ -67,12 +67,4 @@ def render_submission_json(
     | PullRequestInspectionResult
     | SubmissionDecisionResult,
 ) -> str:
-    payload = asdict(value)
-    if payload.get("repo_pack") is not None:
-        payload["subnet_pack"] = payload["repo_pack"]
-    metadata = payload.get("metadata")
-    if isinstance(metadata, dict):
-        if metadata.get("repo_pack") is not None:
-            metadata["subnet_pack"] = metadata["repo_pack"]
-        payload["metadata"] = metadata
-    return json.dumps(payload, indent=2) + "\n"
+    return json.dumps(asdict(value), indent=2) + "\n"

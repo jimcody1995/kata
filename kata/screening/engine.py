@@ -23,7 +23,7 @@ REVIEW_MODE_ENV = "KATA_SCREENING_REVIEW_MODE"
 def _plugin_static_screen_findings(
     *,
     submission_root: Path,
-    repo_pack: str | None,
+    subnet_pack: str | None,
     mode: str,
 ) -> list:
     """Per-subnet static screening findings from the lane's plugin, if any.
@@ -34,7 +34,7 @@ def _plugin_static_screen_findings(
     """
     from kata.plugins.discovery import plugin_for_pack
 
-    plugin = plugin_for_pack(repo_pack, mode)
+    plugin = plugin_for_pack(subnet_pack, mode)
     if plugin is None:
         return []
     findings = plugin.static_screen(str(submission_root))
@@ -44,7 +44,7 @@ def _plugin_static_screen_findings(
 def _plugin_benchmark_review(
     *,
     bundle_files: dict[str, str],
-    repo_pack: str | None,
+    subnet_pack: str | None,
     mode: str,
     strict: bool,
 ) -> tuple[list, list, float]:
@@ -55,7 +55,7 @@ def _plugin_benchmark_review(
     """
     from kata.plugins.discovery import plugin_for_pack
 
-    plugin = plugin_for_pack(repo_pack, mode)
+    plugin = plugin_for_pack(subnet_pack, mode)
     if plugin is None:
         return [], [], 0.0
     rejects, reviews, score = plugin.benchmark_review(bundle_files, strict=strict)
@@ -67,7 +67,7 @@ def _plugin_llm_review(
     submission_root: Path,
     bundle_files: dict[str, str],
     decision,
-    repo_pack: str | None,
+    subnet_pack: str | None,
     mode: str,
 ) -> tuple[list, list]:
     """Optional subnet LLM review of a suspicious submission from the lane's plugin.
@@ -76,7 +76,7 @@ def _plugin_llm_review(
     """
     from kata.plugins.discovery import plugin_for_pack
 
-    plugin = plugin_for_pack(repo_pack, mode)
+    plugin = plugin_for_pack(subnet_pack, mode)
     if plugin is None:
         return [], []
     findings, notes = plugin.llm_review(
@@ -90,7 +90,7 @@ def screen_submission(
     submission_root: Path,
     public_root: Path | None = None,
     mode: str = "miner",
-    repo_pack: str | None = None,
+    subnet_pack: str | None = None,
     enable_review: bool | None = None,
     strict_replay: bool | None = None,
     check_current_king: bool = True,
@@ -113,13 +113,13 @@ def screen_submission(
     reject_findings.extend(
         _plugin_static_screen_findings(
             submission_root=submission_root,
-            repo_pack=repo_pack,
+            subnet_pack=subnet_pack,
             mode=mode,
         )
     )
     bench_rejects, review_findings, review_score = _plugin_benchmark_review(
         bundle_files=bundle_files,
-        repo_pack=repo_pack,
+        subnet_pack=subnet_pack,
         mode=mode,
         strict=resolve_strict_replay(strict_replay),
     )
@@ -130,7 +130,7 @@ def screen_submission(
         copycat_rejects, copycat_reviews, copycat_score = screen_current_king_copycat(
             submission_root=submission_root,
             bundle_files=bundle_files,
-            repo_pack=repo_pack,
+            subnet_pack=subnet_pack,
             mode=mode,
             public_root=str(public_root) if public_root is not None else None,
         )
@@ -156,7 +156,7 @@ def screen_submission(
             review_reasons=review_findings,
             score=review_score,
         ),
-        repo_pack=repo_pack,
+        subnet_pack=subnet_pack,
         mode=mode,
     )
     review_findings.extend(llm_findings)

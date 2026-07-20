@@ -79,7 +79,7 @@ def test_mirror_public_king_artifact_publishes_source_bytes_verbatim(tmp_path: P
 
     king_root = mirror_public_king_artifact(
         public_root=str(tmp_path / "pub"),
-        repo_pack="sn60__bitsec",
+        subnet_pack="sn60__bitsec",
         mode="miner",
         artifact_path=str(source),
     )
@@ -156,8 +156,8 @@ def test_promote_lane_king_rolls_back_king_and_state_on_write_failure(
     from kata.promotion import king as king_mod
 
     public_root = tmp_path / "pub"
-    repo_pack, mode = "sn60__bitsec", "miner"
-    king_root = public_root / "kings" / repo_pack / mode
+    subnet_pack, mode = "sn60__bitsec", "miner"
+    king_root = public_root / "kings" / subnet_pack / mode
     king_root.mkdir(parents=True)
     (king_root / "agent.py").write_bytes(b"OLD KING\n")
     (king_root / "agent_manifest.json").write_bytes(b'{"schema_version":1}')
@@ -177,7 +177,7 @@ def test_promote_lane_king_rolls_back_king_and_state_on_write_failure(
 
     entry = SimpleNamespace(evaluator_id="no-plugin-evaluator", lane_id="lane-x")
     verification = SimpleNamespace(
-        repo_pack=repo_pack,
+        subnet_pack=subnet_pack,
         mode=mode,
         submission_id="new-id",
         submission_path=str(candidate),
@@ -212,7 +212,7 @@ def test_submission_metadata_challenge_trips_subnet_pack_field(tmp_path: Path) -
     metadata_path = tmp_path / "submission.json"
     metadata = SubmissionMetadata(
         schema_version=2,
-        repo_pack="sn60__bitsec",
+        subnet_pack="sn60__bitsec",
         mode="miner",
         submission_id="alice-20260708-01",
         created_at="2026-07-08T00:00:00+00:00",
@@ -241,7 +241,7 @@ def test_resolve_submission_descriptor_parses_repo_relative_path(tmp_path: Path)
 
     assert reasons == []
     assert descriptor is not None
-    assert descriptor.repo_pack == "sn60__bitsec"
+    assert descriptor.subnet_pack == "sn60__bitsec"
     assert descriptor.mode == "miner"
     assert descriptor.submission_id == "alice-20260708-01"
     assert descriptor.agent_path == submission_root / "agent.py"
@@ -271,7 +271,7 @@ def test_resolve_submission_descriptor_rejects_nested_helper_as_submission_root(
 def test_changed_path_validation_allows_helper_module(tmp_path: Path) -> None:
     descriptor = SubmissionDescriptor(
         root=tmp_path / "submissions/sn60__bitsec/miner/alice-20260708-01",
-        repo_pack="sn60__bitsec",
+        subnet_pack="sn60__bitsec",
         mode="miner",
         submission_id="alice-20260708-01",
         agent_path=tmp_path / "agent.py",
@@ -291,7 +291,7 @@ def test_changed_path_validation_allows_helper_module(tmp_path: Path) -> None:
 def test_changed_path_validation_requires_single_bundle_scope(tmp_path: Path) -> None:
     descriptor = SubmissionDescriptor(
         root=tmp_path / "submissions/sn60__bitsec/miner/alice-20260708-01",
-        repo_pack="sn60__bitsec",
+        subnet_pack="sn60__bitsec",
         mode="miner",
         submission_id="alice-20260708-01",
         agent_path=tmp_path / "agent.py",
@@ -316,14 +316,14 @@ def test_changed_path_validation_requires_single_bundle_scope(tmp_path: Path) ->
 def test_validate_submission_metadata_detects_descriptor_mismatch() -> None:
     metadata = SubmissionMetadata(
         schema_version=2,
-        repo_pack="sn60__bitsec",
+        subnet_pack="sn60__bitsec",
         mode="miner",
         submission_id="alice-20260708-01",
         created_at="2026-07-08T00:00:00+00:00",
     )
     descriptor = SubmissionDescriptor(
         root=Path("submissions/sn60__bitsec/miner/bob-20260708-01"),
-        repo_pack="sn60__bitsec",
+        subnet_pack="sn60__bitsec",
         mode="miner",
         submission_id="bob-20260708-01",
         agent_path=Path("agent.py"),

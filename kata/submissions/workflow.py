@@ -68,7 +68,7 @@ from kata.util import dedupe
 
 def init_submission(
     *,
-    repo_pack: str,
+    subnet_pack: str,
     mode: str,
     submission_id: str,
     output_root: str | None = None,
@@ -77,18 +77,18 @@ def init_submission(
     notes: str | None = None,
 ) -> Path:
     validate_submission_mode(mode)
-    lane_reasons = validate_submission_lane(repo_pack, mode)
+    lane_reasons = validate_submission_lane(subnet_pack, mode)
     if lane_reasons:
         raise ValueError("; ".join(lane_reasons))
     effective_author = author.strip() if author and author.strip() else None
     root_base = (
         Path(output_root).expanduser().resolve() if output_root else default_submissions_root()
     )
-    submission_root = root_base / repo_pack / mode / submission_id
+    submission_root = root_base / subnet_pack / mode / submission_id
     submission_root.mkdir(parents=True, exist_ok=False)
     metadata = SubmissionMetadata(
         schema_version=SUBMISSION_SCHEMA_VERSION,
-        repo_pack=repo_pack,
+        subnet_pack=subnet_pack,
         mode=mode,
         submission_id=submission_id,
         created_at=datetime.now(UTC).isoformat(),
@@ -127,7 +127,7 @@ def validate_submission(
     if descriptor is None:
         return SubmissionValidationResult(
             submission_path=str(root),
-            repo_pack=None,
+            subnet_pack=None,
             mode=None,
             submission_id=None,
             agent_path=None,
@@ -143,7 +143,7 @@ def validate_submission(
         reasons.append("Submission bundle must not contain symlinks: " + ", ".join(symlink_paths))
         return SubmissionValidationResult(
             submission_path=str(descriptor.root),
-            repo_pack=descriptor.repo_pack,
+            subnet_pack=descriptor.subnet_pack,
             mode=descriptor.mode,
             submission_id=descriptor.submission_id,
             agent_path=str(descriptor.agent_path),
@@ -199,11 +199,11 @@ def validate_submission(
             reasons.extend(candidate_validation.reasons)
 
     evaluator_entry = find_evaluator_pack_entry(
-        descriptor.repo_pack, descriptor.mode, public_root=public_root
+        descriptor.subnet_pack, descriptor.mode, public_root=public_root
     )
     return SubmissionValidationResult(
         submission_path=str(descriptor.root),
-        repo_pack=descriptor.repo_pack,
+        subnet_pack=descriptor.subnet_pack,
         mode=descriptor.mode,
         submission_id=descriptor.submission_id,
         agent_path=str(agent_path),
@@ -225,7 +225,7 @@ def plugin_for_submission(
 ):
     """The subnet plugin registered for this submission's lane, or ``None``."""
     entry = find_evaluator_pack_entry(
-        metadata.repo_pack, metadata.mode, public_root=public_root
+        metadata.subnet_pack, metadata.mode, public_root=public_root
     )
     if entry is None:
         return None
@@ -253,7 +253,7 @@ def inspect_pull_request(
         return PullRequestInspectionResult(
             action=PR_ACTION_CLOSE_INVALID,
             submission_path=None,
-            repo_pack=None,
+            subnet_pack=None,
             mode=None,
             submission_id=None,
             changed_paths=[],
@@ -269,7 +269,7 @@ def inspect_pull_request(
         return PullRequestInspectionResult(
             action=PR_ACTION_CLOSE_INVALID,
             submission_path=None,
-            repo_pack=None,
+            subnet_pack=None,
             mode=None,
             submission_id=None,
             changed_paths=normalized_changed,
@@ -282,7 +282,7 @@ def inspect_pull_request(
         return PullRequestInspectionResult(
             action=PR_ACTION_CLOSE_INVALID,
             submission_path=None,
-            repo_pack=None,
+            subnet_pack=None,
             mode=None,
             submission_id=None,
             changed_paths=normalized_changed,
@@ -301,7 +301,7 @@ def inspect_pull_request(
         return PullRequestInspectionResult(
             action=PR_ACTION_CLOSE_INVALID,
             submission_path=None,
-            repo_pack=None,
+            subnet_pack=None,
             mode=None,
             submission_id=None,
             changed_paths=normalized_changed,
@@ -315,13 +315,13 @@ def inspect_pull_request(
         reasons.append(
             "PR changes files outside the allowed submission directory or adds unsupported files."
         )
-    reasons.extend(validate_submission_lane(descriptor.repo_pack, descriptor.mode))
+    reasons.extend(validate_submission_lane(descriptor.subnet_pack, descriptor.mode))
 
     action = PR_ACTION_EVALUATE if not reasons else PR_ACTION_CLOSE_INVALID
     return PullRequestInspectionResult(
         action=action,
         submission_path=str((resolved_repo_root / relative_dir).resolve()),
-        repo_pack=descriptor.repo_pack,
+        subnet_pack=descriptor.subnet_pack,
         mode=descriptor.mode,
         submission_id=descriptor.submission_id,
         changed_paths=normalized_changed,
@@ -344,14 +344,14 @@ def verify_submission_result(
         )
 
     evaluator_entry = find_evaluator_pack_entry(
-        validation.metadata.repo_pack,
+        validation.metadata.subnet_pack,
         validation.metadata.mode,
         public_root=public_root,
     )
     if evaluator_entry is None:
         raise ValueError(
             "No evaluator-backed lane is registered for "
-            f"`{validation.metadata.repo_pack}/{validation.metadata.mode}`."
+            f"`{validation.metadata.subnet_pack}/{validation.metadata.mode}`."
         )
     # Freshness is checked against the lane's plugin identity, not a hardcoded model.
     plugin = plugin_for_evaluator(evaluator_entry.evaluator_id)
@@ -372,7 +372,7 @@ def verify_submission_result(
     current_king_hash = (
         resolve_lane_king_hash(
             evaluator_entry.lane_id,
-            repo_pack=validation.metadata.repo_pack,
+            subnet_pack=validation.metadata.subnet_pack,
             mode=validation.metadata.mode,
             public_root=public_root,
             artifact_hasher=plugin.hash_bundle,
@@ -415,7 +415,7 @@ def verify_submission_result(
     return SubmissionVerificationResult(
         submission_path=validation.submission_path,
         challenge_summary_path=str(Path(challenge_summary_path).expanduser().resolve()),
-        repo_pack=validation.metadata.repo_pack,
+        subnet_pack=validation.metadata.subnet_pack,
         mode=validation.metadata.mode,
         submission_id=validation.metadata.submission_id,
         candidate_artifact_hash=candidate_hash,
@@ -456,12 +456,12 @@ def promote_submission_result(
             + "; ".join(verification.reasons or ["submission result is not auto-merge ready"])
         )
     evaluator_entry = find_evaluator_pack_entry(
-        verification.repo_pack, verification.mode, public_root=public_root
+        verification.subnet_pack, verification.mode, public_root=public_root
     )
     if evaluator_entry is None:
         raise ValueError(
             "No evaluator-backed lane is registered for "
-            f"`{verification.repo_pack}/{verification.mode}`."
+            f"`{verification.subnet_pack}/{verification.mode}`."
         )
     plugin = plugin_for_evaluator(evaluator_entry.evaluator_id)
     if plugin is None:
@@ -482,4 +482,4 @@ def validate_submission_target(
     *,
     public_root: str | None = None,
 ) -> list[str]:
-    return validate_submission_lane(metadata.repo_pack, metadata.mode, public_root=public_root)
+    return validate_submission_lane(metadata.subnet_pack, metadata.mode, public_root=public_root)

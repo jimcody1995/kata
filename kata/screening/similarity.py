@@ -24,14 +24,14 @@ def screen_current_king_copycat(
     *,
     submission_root: Path,
     bundle_files: dict[str, str],
-    repo_pack: str | None,
+    subnet_pack: str | None,
     mode: str,
     public_root: str | None = None,
 ) -> tuple[list[ScreeningFinding], list[ScreeningFinding], int]:
     """Return exact-copy rejects, near-copy reviews, and score contribution."""
-    if not repo_pack:
+    if not subnet_pack:
         return [], [], 0
-    lane_id = resolve_lane_id(repo_pack, mode, public_root=public_root)
+    lane_id = resolve_lane_id(subnet_pack, mode, public_root=public_root)
     if lane_id is None:
         return [], [], 0
     reject_findings: list[ScreeningFinding] = []
@@ -49,7 +49,7 @@ def screen_current_king_copycat(
     king_agent_path = (
         resolve_public_king_root(
             public_root=public_root,
-            repo_pack=repo_pack,
+            subnet_pack=subnet_pack,
             mode=mode,
         )
         / AGENT_ENTRY_FILENAME
@@ -136,13 +136,13 @@ def screen_exact_bundle_copy(
 
 
 def resolve_lane_id(
-    repo_pack: str,
+    subnet_pack: str,
     mode: str,
     *,
     public_root: str | None = None,
 ) -> str | None:
     registry = load_pack_registry(public_root=public_root)
     for entry in registry.packs:
-        if entry.repo_pack == repo_pack and entry.mode == mode:
+        if entry.subnet_pack == subnet_pack and entry.mode == mode:
             return entry.lane_id
     return None

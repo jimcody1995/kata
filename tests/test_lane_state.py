@@ -43,7 +43,7 @@ def test_write_and_load_evaluator_lane_state_challenge_trip(tmp_path: Path) -> N
     lane = EvaluatorLaneMetadata(
         schema_version=LANE_METADATA_SCHEMA_VERSION,
         lane_id="sn60__bitsec",
-        repo_pack="sn60__bitsec",
+        subnet_pack="sn60__bitsec",
         mode="miner",
         evaluator_id="sn60_bitsec",
         evaluator_policy_version="v1",
@@ -118,7 +118,7 @@ def test_lane_discovery_filters_for_lane_metadata_and_active_state(tmp_path: Pat
     active_lane = EvaluatorLaneMetadata(
         schema_version=LANE_METADATA_SCHEMA_VERSION,
         lane_id="sn60__bitsec",
-        repo_pack="sn60__bitsec",
+        subnet_pack="sn60__bitsec",
         mode="miner",
         evaluator_id="sn60_bitsec",
         evaluator_policy_version="v1",
@@ -129,7 +129,7 @@ def test_lane_discovery_filters_for_lane_metadata_and_active_state(tmp_path: Pat
     inactive_lane = EvaluatorLaneMetadata(
         schema_version=LANE_METADATA_SCHEMA_VERSION,
         lane_id="legacy__repo",
-        repo_pack="legacy__repo",
+        subnet_pack="legacy__repo",
         mode="contributor",
         evaluator_id="repo_repair",
         evaluator_policy_version="v1",
@@ -152,7 +152,7 @@ def test_load_evaluator_lane_state_leaves_optional_files_absent(tmp_path: Path) 
     lane = EvaluatorLaneMetadata(
         schema_version=LANE_METADATA_SCHEMA_VERSION,
         lane_id="sn60__bitsec",
-        repo_pack="sn60__bitsec",
+        subnet_pack="sn60__bitsec",
         mode="miner",
         evaluator_id="sn60_bitsec",
         evaluator_policy_version="v1",
@@ -232,7 +232,7 @@ def test_load_lane_metadata_accepts_subnet_pack_field(tmp_path: Path) -> None:
 
     metadata = load_lane_metadata("sn60__bitsec", public_root=str(tmp_path))
 
-    assert metadata.repo_pack == "sn60__bitsec"
+    assert metadata.subnet_pack == "sn60__bitsec"
 
 
 def build_lane_metadata(
@@ -245,7 +245,7 @@ def build_lane_metadata(
     return EvaluatorLaneMetadata(
         schema_version=LANE_METADATA_SCHEMA_VERSION,
         lane_id=lane_id,
-        repo_pack=lane_id,
+        subnet_pack=lane_id,
         mode="miner",
         evaluator_id=evaluator_id,
         evaluator_policy_version="v1",
