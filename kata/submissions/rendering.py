@@ -59,39 +59,6 @@ def render_pull_request_inspection(result: PullRequestInspectionResult) -> str:
     return "\n".join(lines)
 
 
-def render_submission_verification(result: SubmissionVerificationResult) -> str:
-    lines: list[str] = []
-    lines.append(f"Submission: {result.submission_path}")
-    lines.append(f"Challenge summary: {result.challenge_summary_path}")
-    lines.append(f"Subnet pack: {result.repo_pack}")
-    lines.append(f"Mode: {result.mode}")
-    lines.append(f"Submission id: {result.submission_id}")
-    lines.append(
-        "Submission matches challenge: " + ("yes" if result.submission_matches_challenge else "no")
-    )
-    lines.append(f"King is current: {'yes' if result.king_is_current else 'no'}")
-    lines.append(f"Benchmark lane is current: {'yes' if result.benchmark_is_current else 'no'}")
-    lines.append(f"Promotion ready: {'yes' if result.promotion_ready else 'no'}")
-    lines.append(f"Auto-merge ready: {'yes' if result.auto_merge_ready else 'no'}")
-    if result.reasons:
-        lines.append("Reasons:")
-        lines.extend(f"- {reason}" for reason in result.reasons)
-    return "\n".join(lines)
-
-
-def render_submission_decision(result: SubmissionDecisionResult) -> str:
-    lines = [
-        f"Action: {result.action}",
-        f"Submission: {result.submission_path}",
-        f"Challenge summary: {result.challenge_summary_path}",
-        f"Reason: {result.reason}",
-        f"Promotion ready: {'yes' if result.promotion_ready else 'no'}",
-        f"Auto-merge ready: {'yes' if result.auto_merge_ready else 'no'}",
-    ]
-    if result.reasons:
-        lines.append("Reasons:")
-        lines.extend(f"- {reason}" for reason in result.reasons)
-    return "\n".join(lines)
 
 
 def render_submission_json(

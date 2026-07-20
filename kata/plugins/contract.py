@@ -210,16 +210,6 @@ class SubnetPlugin(ABC):
     def register_cli(self, subparsers) -> None:
         """Contribute this subnet's own top-level ``kata`` subcommands. Default: none."""
 
-    def add_evaluate_arguments(self, parser) -> None:
-        """Register this subnet's ``kata submission evaluate`` CLI arguments. Default: none."""
-
-    def evaluate_from_cli(self, args) -> int:
-        """Run ``kata submission evaluate`` for this subnet and print the result.
-
-        Default: unsupported (the subnet has no single-submission duel CLI).
-        """
-        raise NotImplementedError(f"{type(self).__name__} does not implement evaluate_from_cli")
-
     def llm_review(self, *, submission_root, bundle_files, decision):
         """Optional subnet LLM review of a suspicious submission.
 

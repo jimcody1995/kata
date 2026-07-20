@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from kata.plugins.discovery import plugin_for_evaluator
 from kata.screening.models import ScreeningFinding
 from kata.screening.python_ast import (
     python_source_similarity,
     python_sources_equivalent,
 )
-from kata.plugins.discovery import plugin_for_evaluator
 from kata.screening.rules import hash_submission_bundle
 from kata.state.artifacts import resolve_public_king_root
 from kata.state.lanes import (

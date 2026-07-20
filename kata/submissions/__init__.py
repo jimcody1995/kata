@@ -35,10 +35,8 @@ from kata.submissions.models import (
 )
 from kata.submissions.rendering import (
     render_pull_request_inspection,
-    render_submission_decision,
     render_submission_json,
     render_submission_validation,
-    render_submission_verification,
 )
 
 __all__ = [
@@ -69,10 +67,8 @@ __all__ = [
     "normalize_changed_paths",
     "read_changed_paths_file",
     "render_pull_request_inspection",
-    "render_submission_decision",
     "render_submission_json",
     "render_submission_validation",
-    "render_submission_verification",
     "required_submission_entrypoint_reason",
     "resolve_submission_descriptor",
     "write_submission_metadata",

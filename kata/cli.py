@@ -22,18 +22,14 @@ from kata.submissions.constants import SUPPORTED_SUBMISSION_MODES
 from kata.submissions.layout import read_changed_paths_file
 from kata.submissions.rendering import (
     render_pull_request_inspection,
-    render_submission_decision,
     render_submission_json,
     render_submission_validation,
-    render_submission_verification,
 )
 from kata.submissions.workflow import (
-    decide_submission_action,
     init_submission,
     inspect_pull_request,
     promote_submission_result,
     validate_submission,
-    verify_submission_result,
 )
 
 try:
@@ -300,76 +296,6 @@ def _add_submission_parsers(subparsers) -> None:
     )
     submission_inspect.set_defaults(handler=handle_submission_inspect)
 
-    submission_evaluate = submission_subparsers.add_parser(
-        "evaluate",
-        help="Run a validated submission against the current lane king.",
-    )
-    submission_evaluate.add_argument(
-        "--path",
-        required=True,
-        help="Path to submissions/<subnet-pack>/<mode>/<submission-id>.",
-    )
-    submission_evaluate.add_argument(
-        "--output-root",
-        default=None,
-        help="Optional base directory for run artifacts. Defaults to ./runs.",
-    )
-    # Each subnet plugin contributes its own evaluate arguments (e.g. SN60's --sn60-* flags).
-    from kata.plugins.discovery import load_builtin_plugins
-    from kata.plugins.registry import all_plugins
-
-    load_builtin_plugins()
-    for plugin in all_plugins():
-        plugin.add_evaluate_arguments(submission_evaluate)
-    submission_evaluate.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit machine-readable JSON with the challenge summary path.",
-    )
-    submission_evaluate.set_defaults(handler=handle_submission_evaluate)
-
-    submission_verify = submission_subparsers.add_parser(
-        "verify",
-        help="Check whether a submission result is still current and auto-mergeable.",
-    )
-    submission_verify.add_argument(
-        "--path",
-        required=True,
-        help="Path to submissions/<subnet-pack>/<mode>/<submission-id>.",
-    )
-    submission_verify.add_argument(
-        "--challenge-run",
-        required=True,
-        help="Path to the challenge_summary.json generated for this submission.",
-    )
-    submission_verify.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit machine-readable JSON instead of text.",
-    )
-    submission_verify.set_defaults(handler=handle_submission_verify)
-
-    submission_decide = submission_subparsers.add_parser(
-        "decide",
-        help="Decide whether a submission PR should be closed, rerun, or auto-merged.",
-    )
-    submission_decide.add_argument(
-        "--path",
-        required=True,
-        help="Path to submissions/<subnet-pack>/<mode>/<submission-id>.",
-    )
-    submission_decide.add_argument(
-        "--challenge-run",
-        required=True,
-        help="Path to the challenge_summary.json generated for this submission.",
-    )
-    submission_decide.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit machine-readable JSON instead of text.",
-    )
-    submission_decide.set_defaults(handler=handle_submission_decide)
-
 
 def _add_round_parser(subparsers) -> None:
     round_cmd = subparsers.add_parser(
@@ -528,36 +454,6 @@ def handle_submission_inspect(args: argparse.Namespace) -> int:
     )
     print(render_submission_json(result) if args.json else render_pull_request_inspection(result))
     return 0 if result.action == "evaluate" else 2
-
-
-def handle_submission_evaluate(args: argparse.Namespace) -> int:
-    from kata.submissions.workflow import plugin_for_submission
-
-    validation = validate_submission(args.path)
-    if not validation.is_valid or validation.metadata is None:
-        raise SystemExit(
-            "Submission is invalid. Run `kata submission validate` first. "
-            + "; ".join(validation.reasons or ["unknown validation failure"])
-        )
-    plugin = plugin_for_submission(validation.metadata)
-    if plugin is None:
-        raise SystemExit(
-            "No subnet plugin is registered for lane "
-            f"`{validation.metadata.repo_pack}/{validation.metadata.mode}`."
-        )
-    return plugin.evaluate_from_cli(args)
-
-
-def handle_submission_verify(args: argparse.Namespace) -> int:
-    result = verify_submission_result(args.path, args.challenge_run)
-    print(render_submission_json(result) if args.json else render_submission_verification(result))
-    return 0 if result.auto_merge_ready else 2
-
-
-def handle_submission_decide(args: argparse.Namespace) -> int:
-    result = decide_submission_action(args.path, args.challenge_run)
-    print(render_submission_json(result) if args.json else render_submission_decision(result))
-    return 0 if result.action == "merge" else 2
 
 
 def parse_round_candidate(spec: str) -> tuple[str, str]:
