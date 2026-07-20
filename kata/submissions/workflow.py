@@ -390,25 +390,8 @@ def verify_submission_result(
         summary.mode == validation.metadata.mode
         and summary.candidate_artifact_hash == candidate_hash
     )
-    # Candidate-only recovery rounds intentionally skip king evaluation (the
-    # maintainer opted out via KATA_ROUND_CANDIDATE_ONLY), so the king-currency and
-    # benchmark-currency staleness guards do not apply -- the top candidate is
-    # promoted to king. The plugin's extra_verification_reasons still enforces its
-    # own floor (SN60: at least one true-positive vulnerability).
-    #
-    # But only honor that bypass when the candidate-only result is NOT STALE: either
-    # the lane has no reigning king yet (a legitimate bootstrap), or the king the
-    # round ran against is still the current king (a deliberate force-replace). A held
-    # candidate-only result whose king has since changed falls back to the normal
-    # staleness guards -- otherwise it could be promoted over a king it never actually
-    # evaluated against. This comparison is only trustworthy because the recorded and
-    # current king hashes now use the same lane hasher (see above).
-    declared_candidate_only = bool(getattr(summary, "is_candidate_only", False))
-    candidate_only = declared_candidate_only and (
-        current_king_hash == "" or summary.king_artifact_hash == current_king_hash
-    )
-    king_is_current = candidate_only or summary.king_artifact_hash == current_king_hash
-    benchmark_is_current = candidate_only or (
+    king_is_current = summary.king_artifact_hash == current_king_hash
+    benchmark_is_current = (
         summary.validator_model == validator_identity and lane_benchmark_is_current
     )
     current_promotion_ready = summary.promotion_ready

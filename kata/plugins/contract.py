@@ -250,7 +250,6 @@ class SubnetPlugin(ABC):
         config: dict[str, Any],
         output_root: str,
         run_id: str | None = None,
-        score_king: bool = True,
         progress_path: str | None = None,
     ) -> object:
         """Run one competition round for this subnet and return its result.
@@ -269,5 +268,4 @@ class SubnetPlugin(ABC):
             config=config,
             output_root=output_root,
             seed=run_id or "round",
-            score_king=score_king,
         )

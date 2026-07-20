@@ -90,10 +90,11 @@ def run_plugin_round(
     """Run one King-of-the-Hill round through ``plugin`` and return a generic outcome.
 
     ``candidates`` is a list of ``(label, agent_path)``. The king is scored once (unless
-    ``score_king`` is False, e.g. candidate-only recovery), each candidate is scored,
-    then they are ranked with ``plugin.compare`` and the winner is the top-ranked
-    challenger for which ``plugin.beats_king`` holds. A pre-sampled ``problems`` may be
-    passed to avoid re-sampling (e.g. when the caller sized progress from it).
+    ``score_king`` is False -- the lazy-king optimization skips it when no candidate
+    qualified for scoring), each candidate is scored, then they are ranked with
+    ``plugin.compare`` and the winner is the top-ranked challenger for which
+    ``plugin.beats_king`` holds. A pre-sampled ``problems`` may be passed to avoid
+    re-sampling (e.g. when the caller sized progress from it).
     """
     if problems is None:
         problems = plugin.sample_problems(seed=seed, config=config)

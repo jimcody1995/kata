@@ -399,14 +399,6 @@ def _add_round_parser(subparsers) -> None:
         help="Optional evaluator-owned cache path for this round.",
     )
     round_cmd.add_argument(
-        "--candidate-only",
-        action="store_true",
-        help=(
-            "Recovery mode: score candidates against each other only and skip "
-            "evaluating the current king."
-        ),
-    )
-    round_cmd.add_argument(
         "--output-root",
         default=None,
         help="Optional base directory for round artifacts. Defaults to ./runs.",
@@ -598,7 +590,6 @@ def handle_round(args: argparse.Namespace) -> int:
         candidates=candidates,
         config=config,
         output_root=args.output_root or "runs",
-        score_king=not args.candidate_only,
         progress_path=args.round_progress_path,
     )
     if args.json:
