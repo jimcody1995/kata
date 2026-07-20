@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """SN60 miner: multi-language triage + deep contiguous + wide second pass.
 
 Built to challenge Dexterity104 (PR #160): full sol/vy/rs/move/cairo coverage,
@@ -7,6 +5,8 @@ risk-window compaction for large files, 3 timed LLM calls under the TEE
 screener budget, plus high-precision structural supplements. No fingerprint
 branches or canned benchmark answers.
 """
+
+from __future__ import annotations
 
 import json
 import os
@@ -79,8 +79,14 @@ CONTRACT_SOL = re.compile(
     r"^\s*(?:abstract\s+contract|contract|library|interface)\s+([A-Za-z_][A-Za-z0-9_]*)",
     re.MULTILINE,
 )
-CONTRACT_RS = re.compile(r"^\s*(?:pub\s+)?(?:mod|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
-CONTRACT_MOVE = re.compile(r"^\s*module\s+(?:[A-Za-z_0-9]+::)?([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
+CONTRACT_RS = re.compile(
+    r"^\s*(?:pub\s+)?(?:mod|struct|enum)\s+([A-Za-z_][A-Za-z0-9_]*)",
+    re.MULTILINE,
+)
+CONTRACT_MOVE = re.compile(
+    r"^\s*module\s+(?:[A-Za-z_0-9]+::)?([A-Za-z_][A-Za-z0-9_]*)",
+    re.MULTILINE,
+)
 CONTRACT_CAIRO = re.compile(r"^\s*(?:pub\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
 IMPORT_RE = re.compile(r'^\s*(?:import|use)\b[^;\n]*?["\']?([A-Za-z0-9_./:]+)["\']?', re.MULTILINE)
 DEF_LINE_RE = re.compile(
@@ -583,7 +589,8 @@ def audit_batch(
     )
     parts, room = [header], budget - len(header)
     for rec in batch:
-        body = compact_source(str(rec["text"]), per_file) if compact else str(rec["text"])[:per_file]
+        text = str(rec["text"])
+        body = compact_source(text, per_file) if compact else text[:per_file]
         sigs = [f"{f['line']}:{f['sig']}" for f in rec["functions"][:24]]
         block = (
             f"\n\n=== {rec['rel']} ===\nContracts: {', '.join(rec['contracts'][:8])}\n"
@@ -664,6 +671,7 @@ def structural_probes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if "function initialize" in low and not any(
             x in low for x in ("initializer", "onlyowner", "onlyrole", "_disableinitializers")
         ):
+            fnames = {f["name"] for f in rec["functions"]}
             hits.append(make_probe(
                 rec,
                 "Unprotected initializer",
@@ -671,7 +679,7 @@ def structural_probes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "The initialize entrypoint is externally reachable without a one-time "
                 "initializer modifier or owner/role gate.",
                 "An attacker can seize ownership or critical configuration on first call.",
-                function="initialize" if "initialize" in {f["name"] for f in rec["functions"]} else "",
+                function="initialize" if "initialize" in fnames else "",
             ))
 
         if "tx.origin" in low and any(x in low for x in ("require", "if ", "assert", "revert")):
@@ -693,7 +701,8 @@ def structural_probes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         rec,
                         "Unprotected delegatecall in external entrypoint",
                         "access-control",
-                        "An external function performs delegatecall without a hard owner/role gate.",
+                        "An external function performs delegatecall without a hard "
+                        "owner/role gate.",
                         "Callers can execute attacker logic in the contract storage context.",
                         function=name,
                         line=fn["line"],
@@ -708,7 +717,8 @@ def structural_probes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         "reentrancy",
                         "The function performs an external call/transfer before updating "
                         "balances/shares and has no reentrancy guard.",
-                        "A malicious receiver can re-enter and drain funds against stale accounting.",
+                        "A malicious receiver can re-enter and drain funds against "
+                        "stale accounting.",
                         function=name,
                         line=fn["line"],
                     ))
@@ -720,7 +730,8 @@ def structural_probes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         rec,
                         "Signature path lacks replay / freshness binding",
                         "signature",
-                        "Signature recovery accepts a signer without nonce, deadline, or chain id binding.",
+                        "Signature recovery accepts a signer without nonce, deadline, "
+                        "or chain id binding.",
                         "Valid signatures can be replayed across time or deployments.",
                         function=name,
                         line=fn["line"],
