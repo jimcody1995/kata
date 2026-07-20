@@ -62,7 +62,7 @@ def mirror_public_king_artifact(
     # Copy the winning bundle byte-for-byte (agent files, submission.json, and the
     # sealed_inference_key), NOT through a normalizing write. A miner seals its TEE
     # provider credential to the exact submitted bytes, and the room re-checks that
-    # binding over the king's bytes on every re-scoring round. Normalizing trailing
+    # binding over the king's bytes on every re-scoring pass. Normalizing trailing
     # whitespace/newlines -- or dropping submission.json -- would change those bytes
     # and make a promoted king's sealed key fail its binding, so the king could
     # never run in the room again (the original bytes are gone once the submission

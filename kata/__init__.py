@@ -1,3 +1,9 @@
 """Kata package."""
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
+
+try:
+    __version__ = _version("kata")
+except PackageNotFoundError:  # not installed (e.g. running from a source checkout)
+    __version__ = "0+unknown"

@@ -1,4 +1,4 @@
-"""Live round status persistence helpers."""
+"""Live challenge status persistence helpers."""
 
 from __future__ import annotations
 
