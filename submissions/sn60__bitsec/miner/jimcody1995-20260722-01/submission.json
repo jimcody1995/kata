@@ -1,0 +1,10 @@
+{
+  "schema_version": 2,
+  "subnet_pack": "sn60__bitsec",
+  "mode": "miner",
+  "submission_id": "jimcody1995-20260722-01",
+  "created_at": "2026-07-22T00:10:00+00:00",
+  "author": "jimcody1995",
+  "title": "Recall rebuild vs Dexterity #169 (fix TP=0 overfilter)",
+  "notes": "750s/205 reserve, deep7+wide12, emit 24, high tokens + reasoning_effort, looser shape gates, expanded probes, compact-repo depth. Sealed DeepSeek-V3.2-TEE."
+}
